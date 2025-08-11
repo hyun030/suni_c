@@ -4,6 +4,7 @@ import os
 import tempfile
 import pandas as pd
 from datetime import datetime
+import streamlit as st
 
 # reportlab import
 from reportlab.lib.pagesizes import A4
@@ -21,6 +22,56 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
+
+
+def get_font_paths():
+    """스트림릿 환경에 맞는 폰트 경로를 반환"""
+    # fonts 폴더에 있는 폰트 파일들
+    font_paths = {
+        "Korean": "fonts/NanumGothic.ttf",
+        "KoreanBold": "fonts/NanumGothicBold.ttf", 
+        "KoreanSerif": "fonts/NanumMyeongjo.ttf"
+    }
+    
+    # 파일 존재 여부 확인 후 반환
+    found_fonts = {}
+    for font_name, font_path in font_paths.items():
+        if os.path.exists(font_path):
+            found_fonts[font_name] = font_path
+        else:
+            st.warning(f"⚠️ 폰트 파일을 찾을 수 없음: {font_path}")
+    
+    return found_fonts
+
+
+def register_fonts_safe():
+    """안전하게 폰트를 등록하고 사용 가능한 폰트 이름을 반환"""
+    font_paths = get_font_paths()
+    registered_fonts = {}
+    
+    # 기본 폰트 설정
+    default_fonts = {
+        "Korean": "Helvetica",
+        "KoreanBold": "Helvetica-Bold", 
+        "KoreanSerif": "Times-Roman"
+    }
+    
+    for font_name, default_font in default_fonts.items():
+        if font_name in font_paths:
+            try:
+                # 이미 등록된 폰트인지 확인
+                if font_name not in pdfmetrics.getRegisteredFontNames():
+                    pdfmetrics.registerFont(TTFont(font_name, font_paths[font_name]))
+                    st.success(f"✅ {font_name} 폰트 등록 성공: {font_paths[font_name]}")
+                registered_fonts[font_name] = font_name
+            except Exception as e:
+                st.warning(f"⚠️ {font_name} 폰트 등록 실패: {e}")
+                registered_fonts[font_name] = default_font
+        else:
+            st.warning(f"⚠️ {font_name} 폰트 파일을 찾을 수 없음. 기본 폰트 사용: {default_font}")
+            registered_fonts[font_name] = default_font
+    
+    return registered_fonts
 
 
 def create_excel_report(financial_data=None, news_data=None, insights=None):
@@ -47,35 +98,21 @@ def create_enhanced_pdf_report(
     report_author: str = "보고자 미기재",
     font_paths: dict | None = None,
 ):
-    if font_paths is None:
-        # 폰트 경로 반드시 본인 환경에 맞게 수정 필요
-        font_paths = {
-            "Korean": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf",
-            "KoreanBold": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf",
-            "KoreanSerif": r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjo.ttf",
-        }
-
-    # 폰트 등록
-    for font_name, path in font_paths.items():
-        if os.path.exists(path):
-            try:
-                pdfmetrics.registerFont(TTFont(font_name, path))
-            except Exception as e:
-                print(f"폰트 등록 실패 {font_name}: {e}")
-        else:
-            print(f"폰트 파일 없음: {path}")
-
+    # 스트림릿 환경에서 안전한 폰트 등록
+    registered_fonts = register_fonts_safe()
+    
+    # 스타일 정의 시 등록된 폰트 사용
     styles = getSampleStyleSheet()
     TITLE_STYLE = ParagraphStyle(
         'Title',
-        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
+        fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
         fontSize=20,
         leading=30,
         spaceAfter=15,
     )
     HEADING_STYLE = ParagraphStyle(
         'Heading',
-        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
+        fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
         fontSize=14,
         leading=23,
         textColor=colors.HexColor('#E31E24'),
@@ -84,7 +121,7 @@ def create_enhanced_pdf_report(
     )
     BODY_STYLE = ParagraphStyle(
         'Body',
-        fontName='KoreanSerif' if 'KoreanSerif' in pdfmetrics.getRegisteredFontNames() else 'Times-Roman',
+        fontName=registered_fonts.get('KoreanSerif', 'Times-Roman'),
         fontSize=12,
         leading=18,
         spaceAfter=6,
@@ -110,8 +147,8 @@ def create_enhanced_pdf_report(
         tbl.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 0.5, colors.black),
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F2F2F2')),
-            ('FONTNAME', (0,0), (-1,0), 'KoreanBold'),
-            ('FONTNAME', (0,1), (-1,-1), 'KoreanSerif'),
+            ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+            ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('KoreanSerif', 'Times-Roman')),
             ('FONTSIZE', (0,0), (-1,-1), 8),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ]))
@@ -280,8 +317,8 @@ def create_enhanced_pdf_report(
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E31E24')),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.white),
                 ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                ('FONTNAME', (0,0), (-1,0), 'KoreanBold'),
-                ('FONTNAME', (0,1), (-1,-1), 'KoreanSerif'),
+                ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+                ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('KoreanSerif', 'Times-Roman')),
                 ('FONTSIZE', (0,0), (-1,-1), 8),
                 ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
             ]))
