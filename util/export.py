@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-필수 라이브러리 설치:
-pip install reportlab plotly xlsxwriter
-"""
-
+    # -*- coding: utf-8 -*-
 import io
 import os
 import re
@@ -11,17 +6,19 @@ import tempfile
 import pandas as pd
 from datetime import datetime
 
-# reportlab 임포트
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
-)
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+# 외부 라이브러리
+# 설치: pip install reportlab plotly xlsxwriter
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
 
-# plotly 임포트 및 사용 가능 여부 체크
 try:
     import plotly.express as px
     import plotly.graph_objects as go
@@ -41,17 +38,15 @@ def create_enhanced_pdf_report(
     report_author: str = "보고자 미기재"
 ):
     """
-    PDF 보고서 생성 (한글 포함, CMD/Streamlit 모두 호환)
-    - financial_data: 재무 데이터 (DataFrame)
-    - news_data: 뉴스 데이터 (DataFrame, "제목" 컬럼 필수)
-    - insights: AI 인사이트 텍스트 (str)
-    - selected_charts: plotly Figure 리스트 (추가 차트 삽입용)
-    - quarterly_df: 분기별 데이터 (DataFrame, '분기','회사','영업이익률' 등 컬럼 포함 시 차트 생성)
-    - show_footer: 하단 문구 출력 여부
+    PDF 보고서 생성 (한글 포함)
+    ※ font_paths 내 경로는 본인 PC 절대 경로로 수정 필수
     """
 
-    # 1. 폰트 경로 설정 (본인 PC에서 CMD 성공한 절대 경로로 꼭 변경하세요)
-    local_font_paths = {
+    if not PDF_AVAILABLE:
+        raise ImportError("reportlab 라이브러리가 설치되어 있지 않습니다.")
+
+    # 1. 폰트 경로 설정 (본인 환경에 맞게 절대경로 수정하세요)
+    font_paths = {
         "Korean": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf",
         "KoreanBold": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf",
         "KoreanSerif": r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjo.ttf",
@@ -63,48 +58,92 @@ def create_enhanced_pdf_report(
     }
 
     # 2. 폰트 등록
-    for font_name, font_path in local_font_paths.items():
-        if os.path.exists(font_path):
+    for fam, path in font_paths.items():
+        if os.path.exists(path):
             try:
-                pdfmetrics.registerFont(TTFont(font_name, font_path))
+                pdfmetrics.registerFont(TTFont(fam, path))
+                # 등록 성공 시 이름 그대로 유지
             except Exception as e:
-                print(f"폰트 등록 실패: {font_name} - {e}")
-                local_font_paths[font_name] = fallback_fonts[font_name]
+                print(f"[폰트 등록 실패] {fam} - {e}")
+                font_paths[fam] = fallback_fonts[fam]
         else:
-            print(f"폰트 파일 없음: {font_path}")
-            local_font_paths[font_name] = fallback_fonts[font_name]
+            print(f"[폰트 파일 없음] {path}")
+            font_paths[fam] = fallback_fonts[fam]
 
     # 3. 스타일 정의
     styles = getSampleStyleSheet()
-    styles['Normal'].fontName = local_font_paths["Korean"]
     TITLE_STYLE = ParagraphStyle(
-        'Title',
-        fontName=local_font_paths["KoreanBold"],
+        'TITLE',
+        fontName=font_paths["KoreanBold"] if font_paths["KoreanBold"] in pdfmetrics.getRegisteredFontNames() else fallback_fonts["KoreanBold"],
         fontSize=20,
-        leading=30,
-        spaceAfter=15
+        leading=34,
+        spaceAfter=18
     )
     HEADING_STYLE = ParagraphStyle(
-        'Heading',
-        fontName=local_font_paths["KoreanBold"],
+        'HEADING',
+        fontName=font_paths["KoreanBold"] if font_paths["KoreanBold"] in pdfmetrics.getRegisteredFontNames() else fallback_fonts["KoreanBold"],
         fontSize=14,
-        leading=23,
+        leading=23.8,
         textColor=colors.HexColor('#E31E24'),
         spaceBefore=16,
         spaceAfter=10
     )
     BODY_STYLE = ParagraphStyle(
-        'Body',
-        fontName=local_font_paths["KoreanSerif"],
+        'BODY',
+        fontName=font_paths["KoreanSerif"] if font_paths["KoreanSerif"] in pdfmetrics.getRegisteredFontNames() else fallback_fonts["KoreanSerif"],
         fontSize=12,
-        leading=18,
+        leading=20.4,
         spaceAfter=6
     )
 
+    # 내부 함수: AI 텍스트 정리
+    def _clean_ai_text(raw: str) -> list[tuple[str, str]]:
+        raw = re.sub(r'[*_#>~`]', '', raw)
+        blocks = []
+        for ln in raw.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            if re.match(r'^\d+(\.\d+)*\s', ln):
+                blocks.append(('title', ln))
+            else:
+                blocks.append(('body', ln))
+        return blocks
+
+    # 내부 함수: ASCII 테이블 변환
+    def _ascii_block_to_table(lines: list[str]):
+        header = [c.strip() for c in lines[0].split('|') if c.strip()]
+        data = []
+        for ln in lines[2:]:
+            cols = [c.strip() for c in ln.split('|') if c.strip()]
+            if len(cols) == len(header):
+                data.append(cols)
+        if not data:
+            return None
+        tbl = Table([header] + data)
+        tbl.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E31E24')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), font_paths["KoreanBold"]),
+            ('FONTNAME', (0, 1), (-1, -1), font_paths["KoreanSerif"]),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
+        ]))
+        return tbl
+
+    # 내부 함수: plotly figure → PNG bytes 변환
+    def _fig_to_png_bytes(fig, width=900, height=450):
+        try:
+            return fig.to_image(format="png", width=width, height=height)
+        except Exception:
+            return None
+
     # 4. PDF 문서 생성 준비
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                            leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=54, rightMargin=54, topMargin=54, bottomMargin=54)
 
     story = []
 
@@ -113,9 +152,9 @@ def create_enhanced_pdf_report(
     story.append(Paragraph(
         f"보고일자: {datetime.now().strftime('%Y년 %m월 %d일')}    보고대상: {report_target}    보고자: {report_author}",
         BODY_STYLE))
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 12))
 
-    # 5. 재무분석 결과 표
+    # 5. 재무분석 결과 표 출력
     if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty:
         story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
         df_disp = financial_data[[c for c in financial_data.columns if not str(c).endswith('_원시값')]].copy()
@@ -123,157 +162,119 @@ def create_enhanced_pdf_report(
         tbl.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
-            ('FONTNAME', (0, 0), (-1, 0), local_font_paths["KoreanBold"]),
-            ('FONTNAME', (0, 1), (-1, -1), local_font_paths["KoreanSerif"]),
+            ('FONTNAME', (0, 0), (-1, 0), font_paths["KoreanBold"]),
+            ('FONTNAME', (0, 1), (-1, -1), font_paths["KoreanSerif"]),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ]))
         story.append(tbl)
         story.append(Spacer(1, 18))
 
-    # 6. Plotly 차트 이미지 변환 함수
-    def _fig_to_png_bytes(fig, width=900, height=450):
-        try:
-            return fig.to_image(format="png", width=width, height=height)
-        except Exception:
-            return None
-
-    # 7. 시각화 차트 삽입 (Plotly 가능할 경우)
+    # 6. plotly 차트 삽입
     charts_added = False
     if PLOTLY_AVAILABLE:
-        # 주요 비율 막대그래프 자동 삽입 (financial_data에 % 지표가 있을 때)
-        try:
-            if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty and '구분' in financial_data.columns:
-                ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
-                if not ratio_rows.empty:
-                    key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
-                    ratio_rows['__order__'] = ratio_rows['구분'].apply(lambda x: key_order.index(x) if x in key_order else 999)
-                    ratio_rows = ratio_rows.sort_values('__order__').drop(columns='__order__')
+        # selected_charts 우선 렌더링
+        if selected_charts:
+            story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
+            for idx, fig in enumerate(selected_charts, start=1):
+                img_bytes = _fig_to_png_bytes(fig)
+                if img_bytes:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                        tmp.write(img_bytes)
+                        tmp_path = tmp.name
+                    story.append(Paragraph(f"2-{idx}. 추가 차트", BODY_STYLE))
+                    story.append(RLImage(tmp_path, width=500, height=280))
+                    story.append(Spacer(1, 16))
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+            charts_added = True
 
-                    melt = []
-                    company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
-                    for _, r in ratio_rows.iterrows():
-                        for comp in company_cols:
-                            val = str(r[comp]).replace('%', '').strip()
-                            try:
-                                melt.append({'지표': r['구분'], '회사': comp, '수치': float(val)})
-                            except:
-                                pass
-                    if melt:
-                        bar_df = pd.DataFrame(melt)
-                        fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', title="주요 비율 비교")
-                        img_bytes = _fig_to_png_bytes(fig_bar, 900, 450)
-                        if img_bytes:
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                                tmp.write(img_bytes)
-                                tmp_path = tmp.name
-                            story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
-                            story.append(Paragraph("2-1. 주요 비율 비교 (막대그래프)", BODY_STYLE))
-                            story.append(RLImage(tmp_path, width=500, height=280))
-                            story.append(Spacer(1, 16))
-                            try:
-                                os.unlink(tmp_path)
-                            except:
-                                pass
-                            charts_added = True
-                        else:
-                            story.append(Paragraph("※ 환경 제약으로 차트 이미지는 제외되었습니다.", BODY_STYLE))
-        except Exception as e:
-            story.append(Paragraph(f"막대그래프 생성 오류: {e}", BODY_STYLE))
+        # quarterly_df 시각화 (분기별 영업이익률, 매출액 등)
+        if quarterly_df is not None and hasattr(quarterly_df, "empty") and not quarterly_df.empty:
+            # 영업이익률 추이 꺾은선
+            if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
+                fig_line = go.Figure()
+                for comp in quarterly_df['회사'].dropna().unique():
+                    cdf = quarterly_df[quarterly_df['회사'] == comp]
+                    fig_line.add_trace(go.Scatter(x=cdf['분기'], y=cdf['영업이익률'], mode='lines+markers', name=f"{comp}"))
+                fig_line.update_layout(title="분기별 영업이익률 추이", xaxis_title="분기", yaxis_title="영업이익률(%)")
+                img_bytes = _fig_to_png_bytes(fig_line)
+                if img_bytes:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                        tmp.write(img_bytes)
+                        tmp_path = tmp.name
+                    if not charts_added:
+                        story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
+                    story.append(Paragraph("2-1. 분기별 영업이익률 추이 (꺾은선)", BODY_STYLE))
+                    story.append(RLImage(tmp_path, width=500, height=280))
+                    story.append(Spacer(1, 16))
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
+                    charts_added = True
 
-        # 분기별 추이 그래프 (영업이익률, 매출액)
-        try:
-            if quarterly_df is not None and hasattr(quarterly_df, "empty") and not quarterly_df.empty:
-                if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
-                    fig_line = go.Figure()
-                    for comp in quarterly_df['회사'].dropna().unique():
-                        cdf = quarterly_df[quarterly_df['회사'] == comp]
-                        fig_line.add_trace(go.Scatter(x=cdf['분기'], y=cdf['영업이익률'], mode='lines+markers', name=f"{comp}"))
-                    fig_line.update_layout(title="분기별 영업이익률 추이", xaxis_title="분기", yaxis_title="영업이익률(%)")
-                    img_bytes = _fig_to_png_bytes(fig_line, 900, 450)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        if not charts_added:
-                            story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
-                        story.append(Paragraph("2-2. 분기별 영업이익률 추이 (꺾은선)", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                        charts_added = True
-                    else:
-                        story.append(Paragraph("※ 환경 제약으로 차트 이미지는 제외되었습니다.", BODY_STYLE))
+            # 매출액 추이 꺾은선
+            if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
+                fig_rev = go.Figure()
+                for comp in quarterly_df['회사'].dropna().unique():
+                    cdf = quarterly_df[quarterly_df['회사'] == comp]
+                    fig_rev.add_trace(go.Scatter(x=cdf['분기'], y=cdf['매출액'], mode='lines+markers', name=f"{comp}"))
+                fig_rev.update_layout(title="분기별 매출액 추이", xaxis_title="분기", yaxis_title="매출액(조원)")
+                img_bytes = _fig_to_png_bytes(fig_rev)
+                if img_bytes:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                        tmp.write(img_bytes)
+                        tmp_path = tmp.name
+                    story.append(Paragraph("2-2. 분기별 매출액 추이 (꺾은선)", BODY_STYLE))
+                    story.append(RLImage(tmp_path, width=500, height=280))
+                    story.append(Spacer(1, 16))
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
+                    charts_added = True
 
-                if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
-                    fig_rev = go.Figure()
-                    for comp in quarterly_df['회사'].dropna().unique():
-                        cdf = quarterly_df[quarterly_df['회사'] == comp]
-                        fig_rev.add_trace(go.Scatter(x=cdf['분기'], y=cdf['매출액'], mode='lines+markers', name=f"{comp}"))
-                    fig_rev.update_layout(title="분기별 매출액 추이", xaxis_title="분기", yaxis_title="매출액(조원)")
-                    img_bytes = _fig_to_png_bytes(fig_rev, 900, 450)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        story.append(Paragraph("2-3. 분기별 매출액 추이 (꺾은선)", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                        charts_added = True
-                    else:
-                        story.append(Paragraph("※ 환경 제약으로 차트 이미지는 제외되었습니다.", BODY_STYLE))
-        except Exception as e:
-            story.append(Paragraph(f"추이 그래프 생성 오류: {e}", BODY_STYLE))
-
-        # 사용자가 전달한 추가 Plotly 차트 삽입
-        try:
-            if selected_charts:
-                if not charts_added:
-                    story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
-                for idx, fig in enumerate(selected_charts, start=1):
-                    img_bytes = _fig_to_png_bytes(fig, 900, 450)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        story.append(Paragraph(f"2-{idx+3}. 추가 차트", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                charts_added = True
-        except Exception as e:
-            story.append(Paragraph(f"추가 차트 삽입 오류: {e}", BODY_STYLE))
-
-    # 8. 최신 뉴스 하이라이트
+    # 7. 최신 뉴스 하이라이트
     if news_data is not None and hasattr(news_data, "empty") and not news_data.empty:
         story.append(Paragraph("3. 최신 뉴스 하이라이트", HEADING_STYLE))
         for i, title in enumerate(news_data["제목"].head(5), 1):
             story.append(Paragraph(f"{i}. {title}", BODY_STYLE))
         story.append(Spacer(1, 12))
 
-    # 9. AI 인사이트 영역
+    # 8. AI 인사이트 영역
     if insights:
         story.append(PageBreak())
         story.append(Paragraph("4. AI 인사이트", HEADING_STYLE))
-        for line in insights.splitlines():
-            story.append(Paragraph(line, BODY_STYLE))
+        blocks = _clean_ai_text(str(insights))
+        ascii_buf = []
+        for typ, ln in blocks:
+            if '|' in ln:
+                ascii_buf.append(ln)
+                continue
+            if ascii_buf:
+                tbl = _ascii_block_to_table(ascii_buf)
+                if tbl:
+                    story.append(tbl)
+                story.append(Spacer(1, 12))
+                ascii_buf.clear()
+            if typ == 'title':
+                story.append(Paragraph(f"<b>{ln}</b>", BODY_STYLE))
+            else:
+                story.append(Paragraph(ln, BODY_STYLE))
+        if ascii_buf:
+            tbl = _ascii_block_to_table(ascii_buf)
+            if tbl:
+                story.append(tbl)
 
-    # 10. 푸터 문구
+    # 9. 푸터
     if show_footer:
         story.append(Spacer(1, 24))
         story.append(Paragraph("※ 본 보고서는 대시보드에서 자동 생성되었습니다.", BODY_STYLE))
 
-    # PDF 빌드 및 반환
+    # PDF 빌드
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
