@@ -27,7 +27,16 @@ def initialize_session_state():
             st.session_state[var] = None
     if 'custom_keywords' not in st.session_state:
         st.session_state.custom_keywords = config.BENCHMARKING_KEYWORDS
-
+        
+def sort_quarterly_by_quarter(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    # '2024Q1' → (연도=2024, 분기=1) 추출해 정렬키 생성
+    out[['연도','분기번호']] = out['분기'].str.extract(r'(\d{4})Q([1-4])').astype(int)
+    out = (out.sort_values(['연도','분기번호','회사'])
+               .drop(columns=['연도','분기번호'])
+               .reset_index(drop=True))
+    return out
+    
 def main():
     initialize_session_state()
     st.title("⚡ SK에너지 경쟁사 분석 대시보드")
@@ -125,7 +134,8 @@ def main():
             
             # 분기별 데이터 테이블 표시
             st.markdown("**📋 분기별 재무지표 상세 데이터**")
-            st.dataframe(quarterly_df, use_container_width=True)
+            quarterly_df_sorted = sort_quarterly_by_quarter(quarterly_df)
+            st.dataframe(quarterly_df_sorted, use_container_width=True)
             
             if PLOTLY_AVAILABLE:
                 st.plotly_chart(create_quarterly_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_quarterly_trend")
