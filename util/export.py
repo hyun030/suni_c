@@ -131,9 +131,9 @@ def create_enhanced_pdf_report(
         logging.info(f"__file__ 변수가 없으므로 현재 작업 디렉토리({base_dir})를 기준으로 폰트 경로 설정")
 
     font_paths = {
-        "Korean":      [os.path.join(base_dir, "fonts", "NanumGothic.ttf")],
-        "KoreanBold":  [os.path.join(base_dir, "fonts", "NanumGothicBold.ttf")],
-        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjoBold.ttf")]  # 실제 파일명 확인 필요
+        "Korean":      [r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf"],
+        "KoreanBold":  [r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf"],
+        "KoreanSerif": [r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjoBold.ttf"]
     }
     for family, paths in font_paths.items():
         font_registered = False
