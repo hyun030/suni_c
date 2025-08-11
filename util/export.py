@@ -40,19 +40,18 @@ def create_enhanced_pdf_report(
     report_author: str = "보고자 미기재"
 ):
     """
-    PDF 보고서 생성 (한글 포함) - 폰트 절대경로는 환경에 맞게 수정 필요
+    PDF 보고서 생성 (한글 포함)
+    폰트 경로는 본인 환경에 맞게 font_paths 수정 필요
     """
     if not PDF_AVAILABLE:
         raise ImportError("reportlab 라이브러리가 설치되어 있지 않습니다.")
 
-    # 내부 함수: Plotly figure → PNG bytes 변환 (kaleido 필요)
     def _fig_to_png_bytes(fig, width=900, height=450):
         try:
             return fig.to_image(format="png", width=width, height=height)
         except Exception:
             return None
 
-    # 내부 함수: AI 텍스트 마크다운 특수문자 제거 후 라인별 타입 분류
     def _clean_ai_text(raw: str) -> list[tuple[str, str]]:
         raw = re.sub(r'[*_#>~`]', '', raw)
         blocks = []
@@ -66,7 +65,6 @@ def create_enhanced_pdf_report(
                 blocks.append(('body', ln))
         return blocks
 
-    # 내부 함수: ASCII 형태 표(파이프 구분)를 ReportLab Table로 변환
     def _ascii_block_to_table(lines: list[str]):
         header = [c.strip() for c in lines[0].split('|') if c.strip()]
         data = []
@@ -90,14 +88,13 @@ def create_enhanced_pdf_report(
         ]))
         return tbl
 
-    # 폰트 경로(환경 맞게 수정 필수)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    font_dir = os.path.join(base_dir, "fonts")
+    # 폰트 경로 (환경에 맞게 수정하세요)
     font_paths = {
         "Korean": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf",
         "KoreanBold": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf",
         "KoreanSerif": r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjo.ttf",
     }
+
     for fam, path in font_paths.items():
         if os.path.exists(path):
             try:
@@ -107,7 +104,6 @@ def create_enhanced_pdf_report(
         else:
             print(f"[폰트 파일 없음] {path}")
 
-    # 스타일 정의
     styles = getSampleStyleSheet()
     TITLE_STYLE = ParagraphStyle(
         'TITLE',
@@ -133,7 +129,6 @@ def create_enhanced_pdf_report(
         spaceAfter=6
     )
 
-    # 페이지 번호 그리기
     def _page_number(canvas, doc):
         canvas.setFont('Helvetica', 9)
         canvas.drawCentredString(A4[0] / 2, 18, f"- {canvas.getPageNumber()} -")
@@ -168,12 +163,10 @@ def create_enhanced_pdf_report(
         story.append(tbl)
         story.append(Spacer(1, 18))
 
-    # 2. Plotly 차트 삽입 (막대, 꺾은선, 선택 차트)
+    # 2. Plotly 차트 삽입
     charts_added = False
-
     if PLOTLY_AVAILABLE:
         try:
-            # 주요 비율 막대그래프 (예시)
             if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty and '구분' in financial_data.columns:
                 ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
                 if not ratio_rows.empty:
@@ -213,9 +206,7 @@ def create_enhanced_pdf_report(
             story.append(Paragraph(f"막대그래프 생성 오류: {e}", BODY_STYLE))
 
         try:
-            # 분기별 꺾은선 그래프
             if quarterly_df is not None and hasattr(quarterly_df, "empty") and not quarterly_df.empty:
-                # 영업이익률 꺾은선
                 if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
                     fig_line = go.Figure()
                     for comp in quarterly_df['회사'].dropna().unique():
@@ -240,7 +231,6 @@ def create_enhanced_pdf_report(
                     else:
                         story.append(Paragraph("※ 환경 제약으로 차트 이미지는 제외되었습니다.", BODY_STYLE))
 
-                # 매출액 꺾은선
                 if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
                     fig_rev = go.Figure()
                     for comp in quarterly_df['회사'].dropna().unique():
@@ -266,7 +256,6 @@ def create_enhanced_pdf_report(
             story.append(Paragraph(f"추이 그래프 생성 오류: {e}", BODY_STYLE))
 
         try:
-            # 선택된 추가 차트 삽입
             if selected_charts:
                 if not charts_added:
                     story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
@@ -319,12 +308,10 @@ def create_enhanced_pdf_report(
             if tbl:
                 story.append(tbl)
 
-    # 푸터 출력 옵션
     if show_footer:
         story.append(Spacer(1, 24))
         story.append(Paragraph("※ 본 보고서는 대시보드에서 자동 생성되었습니다.", BODY_STYLE))
 
-    # PDF 문서 빌드
     doc.build(story, onFirstPage=_page_number, onLaterPages=_page_number)
     buff.seek(0)
     return buff.getvalue()
@@ -334,8 +321,6 @@ def create_excel_report(financial_data: pd.DataFrame) -> bytes:
     """
     간단한 Excel 보고서 생성 (financial_data 필수)
     """
-    import pandas as pd
-
     if financial_data is None or financial_data.empty:
         raise ValueError("financial_data가 없습니다.")
 
