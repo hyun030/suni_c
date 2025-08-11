@@ -125,32 +125,36 @@ def create_enhanced_pdf_report(
     # 폰트 등록
     base_dir = ""
     try:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = r"C:\Users\songo\OneDrive\써니C\예시"
     except NameError:
         base_dir = os.getcwd()
         logging.info(f"__file__ 변수가 없으므로 현재 작업 디렉토리({base_dir})를 기준으로 폰트 경로 설정")
 
     font_paths = {
-        "Korean":      [os.path.join(base_dir, "fonts", "NanumGothic.ttf")],
-        "KoreanBold":  [os.path.join(base_dir, "fonts", "NanumGothicBold.ttf")],
-        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjoBold.ttf")]  # 실제 파일명 확인 필요
+        "Korean":      [os.path.join(base_dir, "nanum-gothic", "NanumGothic.ttf"),
+                        os.path.join(base_dir, "nanum-gothic", "나눔고딕.ttf")],
+        "KoreanBold":  [os.path.join(base_dir, "nanum-gothic", "NanumGothicBold.ttf"),
+                        os.path.join(base_dir, "nanum-gothic", "나눔고딕볼드.ttf")],
+        "KoreanSerif": [os.path.join(base_dir, "nanum-myeongjo", "NanumMyeongjoBold.ttf"),
+                        os.path.join(base_dir, "nanum-myeongjo", "나눔명조.ttf")]
     }
-    for family, paths in font_paths.items():
+
+    for font_name, paths in font_paths.items():
         font_registered = False
-        for p in paths:
-            if os.path.exists(p):
+        for path in paths:
+            if os.path.exists(path):
                 try:
-                    pdfmetrics.registerFont(TTFont(family, p))
-                    logging.info(f"폰트 등록 성공: {family} ({p})")
+                    pdfmetrics.registerFont(TTFont(font_name, path))
+                    logging.info(f"폰트 등록 성공: {font_name} ({path})")
                     font_registered = True
                     break
                 except Exception as e:
-                    logging.warning(f"폰트 등록 실패: {family} ({p}) → {e}")
+                    logging.warning(f"폰트 등록 실패: {font_name} ({path}) → {e}")
             else:
-                logging.warning(f"폰트 파일 없음: {p}")
+                logging.warning(f"폰트 파일 없음: {path}")
         if not font_registered:
-            logging.warning(f"{family} 글꼴 등록에 실패했습니다. 기본 폰트로 대체됩니다.")
-
+            logging.warning(f"{font_name} 글꼴 등록에 실패했습니다. 기본 폰트로 대체됩니다.")
+        
     styles = getSampleStyleSheet()
     TITLE_STYLE = ParagraphStyle(
         'TITLE',
