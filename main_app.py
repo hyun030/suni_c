@@ -136,6 +136,7 @@ def main():
             st.markdown("**📋 분기별 재무지표 상세 데이터**")
             quarterly_df_sorted = sort_quarterly_by_quarter(quarterly_df)
             st.dataframe(quarterly_df_sorted, use_container_width=True)
+
             
             if PLOTLY_AVAILABLE:
                 st.plotly_chart(create_quarterly_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_quarterly_trend")
