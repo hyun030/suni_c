@@ -89,7 +89,7 @@ def main():
 
         if 'financial_data' in st.session_state and st.session_state.financial_data is not None:
             st.markdown("---")
-            st.subheader("💰 재무분석 결과")
+            st.subheader("💰 사업보고서(연간) 재무분석 결과")
             final_df = st.session_state.financial_data
             
             # 표시용 컬럼만 표시 (원시값 제외)
