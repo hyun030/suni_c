@@ -33,11 +33,16 @@ def get_font_paths():
         "KoreanSerif": "fonts/NanumMyeongjo.ttf"
     }
     
-    # 파일 존재 여부 확인 후 반환
+    # 파일 존재 여부 및 유효성 확인 후 반환
     found_fonts = {}
     for font_name, font_path in font_paths.items():
         if os.path.exists(font_path):
-            found_fonts[font_name] = font_path
+            # 파일 크기 확인 (0바이트 파일 제외)
+            file_size = os.path.getsize(font_path)
+            if file_size > 0:
+                found_fonts[font_name] = font_path
+            else:
+                st.warning(f"⚠️ 폰트 파일이 비어있음: {font_path} (크기: {file_size})")
         else:
             st.warning(f"⚠️ 폰트 파일을 찾을 수 없음: {font_path}")
     
@@ -68,13 +73,26 @@ def register_fonts_safe():
                 registered_fonts[font_name] = font_name
             except Exception as e:
                 st.error(f"❌ {font_name} 폰트 등록 실패: {e}")
-                registered_fonts[font_name] = default_font
+                st.info(f"🔄 {font_name} 대신 기본 폰트 사용: {default_font}")
+                
+                # KoreanSerif가 실패하면 대안으로 NanumGothic 사용 시도
+                if font_name == "KoreanSerif":
+                    try:
+                        if "Korean" in font_paths and "Korean" in pdfmetrics.getRegisteredFontNames():
+                            registered_fonts[font_name] = "Korean"  # NanumGothic 사용
+                            st.info(f"✨ KoreanSerif 대신 NanumGothic 사용")
+                        else:
+                            registered_fonts[font_name] = default_font
+                    except:
+                        registered_fonts[font_name] = default_font
+                else:
+                    registered_fonts[font_name] = default_font
         else:
             st.warning(f"⚠️ {font_name} 폰트 파일을 찾을 수 없음. 기본 폰트 사용: {default_font}")
             registered_fonts[font_name] = default_font
     
     # 등록된 폰트 목록 출력 (디버깅용)
-    st.write("📝 등록된 폰트들:", pdfmetrics.getRegisteredFontNames())
+    st.write("📝 최종 사용될 폰트들:", registered_fonts)
     
     return registered_fonts
 
