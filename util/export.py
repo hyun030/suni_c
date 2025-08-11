@@ -94,9 +94,9 @@ def create_enhanced_pdf_report(
     base_dir = os.path.dirname(os.path.abspath(__file__))
     font_dir = os.path.join(base_dir, "fonts")
     font_paths = {
-        "Korean": os.path.join(font_dir, "NanumGothic.ttf"),
-        "KoreanBold": os.path.join(font_dir, "NanumGothicBold.ttf"),
-        "KoreanSerif": os.path.join(font_dir, "NanumMyeongjo.ttf"),
+        "Korean": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf",
+        "KoreanBold": r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf",
+        "KoreanSerif": r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjo.ttf",
     }
     for fam, path in font_paths.items():
         if os.path.exists(path):
