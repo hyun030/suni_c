@@ -135,22 +135,23 @@ def create_enhanced_pdf_report(
         "KoreanBold":  [r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf"],
         "KoreanSerif": [r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjoBold.ttf"]
     }
+
     for family, paths in font_paths.items():
         font_registered = False
-        for p in paths:
-            if os.path.exists(p):
+        for path in paths:
+            if os.path.exists(path):
                 try:
-                    pdfmetrics.registerFont(TTFont(family, p))
-                    logging.info(f"폰트 등록 성공: {family} ({p})")
+                    pdfmetrics.registerFont(TTFont(family, path))
+                    logging.info(f"폰트 등록 성공: {family} ({path})")
                     font_registered = True
                     break
                 except Exception as e:
-                    logging.warning(f"폰트 등록 실패: {family} ({p}) → {e}")
+                    logging.warning(f"폰트 등록 실패: {family} ({path}) → {e}")
             else:
-                logging.warning(f"폰트 파일 없음: {p}")
+                logging.warning(f"폰트 파일 없음: {path}")
         if not font_registered:
             logging.warning(f"{family} 글꼴 등록에 실패했습니다. 기본 폰트로 대체됩니다.")
-
+            
     styles = getSampleStyleSheet()
     TITLE_STYLE = ParagraphStyle(
         'TITLE',
