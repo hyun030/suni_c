@@ -63,15 +63,37 @@ def register_fonts_safe():
                 if font_name not in pdfmetrics.getRegisteredFontNames():
                     pdfmetrics.registerFont(TTFont(font_name, font_paths[font_name]))
                     st.success(f"✅ {font_name} 폰트 등록 성공: {font_paths[font_name]}")
+                else:
+                    st.info(f"ℹ️ {font_name} 폰트 이미 등록됨")
                 registered_fonts[font_name] = font_name
             except Exception as e:
-                st.warning(f"⚠️ {font_name} 폰트 등록 실패: {e}")
+                st.error(f"❌ {font_name} 폰트 등록 실패: {e}")
                 registered_fonts[font_name] = default_font
         else:
             st.warning(f"⚠️ {font_name} 폰트 파일을 찾을 수 없음. 기본 폰트 사용: {default_font}")
             registered_fonts[font_name] = default_font
     
+    # 등록된 폰트 목록 출력 (디버깅용)
+    st.write("📝 등록된 폰트들:", pdfmetrics.getRegisteredFontNames())
+    
     return registered_fonts
+
+
+def debug_font_info():
+    """폰트 정보를 디버깅하기 위한 함수"""
+    st.write("🔍 **폰트 디버깅 정보**")
+    st.write(f"현재 작업 디렉토리: {os.getcwd()}")
+    
+    font_files = ["fonts/NanumGothic.ttf", "fonts/NanumGothicBold.ttf", "fonts/NanumMyeongjo.ttf"]
+    for font_file in font_files:
+        if os.path.exists(font_file):
+            size = os.path.getsize(font_file)
+            st.write(f"✅ {font_file} 존재 (크기: {size:,} bytes)")
+        else:
+            st.write(f"❌ {font_file} 없음")
+    
+    st.write(f"reportlab 버전: {__import__('reportlab').__version__}")
+    st.write("---")
 
 
 def create_excel_report(financial_data=None, news_data=None, insights=None):
