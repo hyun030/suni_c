@@ -8,7 +8,8 @@ from datetime import datetime
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
@@ -110,22 +111,29 @@ def create_enhanced_pdf_report(
         return tbl
 
     # ---------- 2. 폰트 등록 (레포 fonts 폴더) ----------
+    import os
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     font_paths = {
         "Korean":      [os.path.join(base_dir, "fonts", "NanumGothic.ttf")],
         "KoreanBold":  [os.path.join(base_dir, "fonts", "NanumGothicBold.ttf")],
-        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjoBold.ttf")]  # 실제 파일명으로 수정
+        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjoBold.ttf")]  # 실제 파일명 맞춤
     }
     for family, paths in font_paths.items():
         for p in paths:
             if os.path.exists(p):
                 try:
                     pdfmetrics.registerFont(TTFont(family, p))
-                except Exception:
-                    pass
-                break  # 첫 성공(또는 시도) 후 다음 글꼴로
-
+                except Exception as e:
+                    print(f"[WARN] 폰트 등록 실패: {family} ({p}) → {e}")
+                break  # 첫 성공 후 다음 글꼴로
+                
     # ---------- 3. 스타일 ----------
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+
     styles = getSampleStyleSheet()
     TITLE_STYLE = ParagraphStyle(
         'TITLE',
@@ -150,7 +158,7 @@ def create_enhanced_pdf_report(
         leading=20.4,
         spaceAfter=6
     )
-
+    
     # ---------- 4. PDF 작성 (A4 규격) ----------
     from reportlab.lib.pagesizes import A4  # 상단에서 이미 임포트되어 있으면 생략 가능
     buff = io.BytesIO()
