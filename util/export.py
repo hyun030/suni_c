@@ -6,18 +6,24 @@ import tempfile
 import pandas as pd
 from datetime import datetime
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
-)
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-
-# Plotly 라이브러리 임포트 시도
+# reportlab 관련 임포트
 try:
-    import plotly
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
+    )
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
+# plotly 관련 임포트
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
@@ -34,119 +40,33 @@ def create_enhanced_pdf_report(
     report_author: str = "보고자 미기재"
 ):
     """
-    PDF 보고서 생성 함수 (한글 포함, 절대경로 폰트 등록 + 다양한 기능 완전 포함)
+    PDF 보고서 생성 (한글 포함) - 폰트 절대경로는 환경에 맞게 수정 필요
     """
+    if not PDF_AVAILABLE:
+        raise ImportError("reportlab 라이브러리가 설치되어 있지 않습니다.")
 
-    # 1. 폰트 절대경로 (본인 환경에 맞게 반드시 변경하세요)
-    korean_font_path = r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothic.ttf"
-    korean_bold_path = r"C:\Users\songo\OneDrive\써니C\예시\nanum-gothic\NanumGothicBold.ttf"
-    korean_serif_path = r"C:\Users\songo\OneDrive\써니C\예시\nanum-myeongjo\NanumMyeongjo.ttf"
-
-    # 2. 폰트 등록
-    for font_name, font_path in [
-        ("Korean", korean_font_path),
-        ("KoreanBold", korean_bold_path),
-        ("KoreanSerif", korean_serif_path),
-    ]:
-        if os.path.exists(font_path):
-            try:
-                pdfmetrics.registerFont(TTFont(font_name, font_path))
-                print(f"[폰트 등록 성공] {font_name} from {font_path}")
-            except Exception as e:
-                print(f"[폰트 등록 실패] {font_name} from {font_path}: {e}")
-        else:
-            print(f"[폰트 파일 없음] {font_path}")
-
-    styles = getSampleStyleSheet()
-
-    TITLE_STYLE = ParagraphStyle(
-        'Title',
-        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
-        fontSize=20,
-        leading=30,
-        spaceAfter=15
-    )
-    HEADING_STYLE = ParagraphStyle(
-        'Heading',
-        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
-        fontSize=14,
-        leading=23,
-        textColor=colors.HexColor('#E31E24'),
-        spaceBefore=16,
-        spaceAfter=10
-    )
-    BODY_STYLE = ParagraphStyle(
-        'Body',
-        fontName='KoreanSerif' if 'KoreanSerif' in pdfmetrics.getRegisteredFontNames() else 'Times-Roman',
-        fontSize=12,
-        leading=18,
-        spaceAfter=6
-    )
-
-    buff = io.BytesIO()
-
-    def _page_number(canvas, doc):
-        canvas.setFont('Helvetica', 9)
-        page_num_text = f"- {canvas.getPageNumber()} -"
-        canvas.drawCentredString(A4[0] / 2, 18, page_num_text)
-
-    doc = SimpleDocTemplate(
-        buff,
-        pagesize=A4,
-        leftMargin=54,
-        rightMargin=54,
-        topMargin=54,
-        bottomMargin=54,
-    )
-
-    story = []
-
-    # 표지 및 메타 정보
-    story.append(Paragraph("손익개선을 위한 SK에너지 및 경쟁사 비교 분석 보고서", TITLE_STYLE))
-    story.append(Paragraph(
-        f"보고일자: {datetime.now().strftime('%Y년 %m월 %d일')}    보고대상: {report_target}    보고자: {report_author}",
-        BODY_STYLE))
-    story.append(Spacer(1, 20))
-
-    # 1. 재무분석 결과 표
-    if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty:
-        story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
-        df_disp = financial_data[[c for c in financial_data.columns if not str(c).endswith('_원시값')]].copy()
-        tbl = Table([df_disp.columns.tolist()] + df_disp.values.tolist(), repeatRows=1)
-        tbl.setStyle(TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
-            ('FONTNAME', (0, 0), (-1, 0), 'KoreanBold'),
-            ('FONTNAME', (0, 1), (-1, -1), 'KoreanSerif'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ]))
-        story.append(tbl)
-        story.append(Spacer(1, 18))
-
-    # Plotly Figure → PNG bytes 변환 함수 (kaleido 필요)
+    # 내부 함수: Plotly figure → PNG bytes 변환 (kaleido 필요)
     def _fig_to_png_bytes(fig, width=900, height=450):
         try:
             return fig.to_image(format="png", width=width, height=height)
         except Exception:
             return None
 
-    # AI 텍스트 마크다운 특수문자 제거 및 텍스트 라인 분류
+    # 내부 함수: AI 텍스트 마크다운 특수문자 제거 후 라인별 타입 분류
     def _clean_ai_text(raw: str) -> list[tuple[str, str]]:
-        raw = re.sub(r'[*_#>~]', '', raw)  # 마크다운 특수문자 제거
+        raw = re.sub(r'[*_#>~`]', '', raw)
         blocks = []
         for ln in raw.splitlines():
             ln = ln.strip()
             if not ln:
                 continue
-            # 숫자 제목 패턴 예) 1.2. 제목
             if re.match(r'^\d+(\.\d+)*\s', ln):
                 blocks.append(('title', ln))
             else:
                 blocks.append(('body', ln))
         return blocks
 
-    # ASCII 표 문자열 블록 → ReportLab Table 변환
+    # 내부 함수: ASCII 형태 표(파이프 구분)를 ReportLab Table로 변환
     def _ascii_block_to_table(lines: list[str]):
         header = [c.strip() for c in lines[0].split('|') if c.strip()]
         data = []
@@ -165,16 +85,95 @@ def create_enhanced_pdf_report(
             ('FONTNAME', (0, 0), (-1, 0), 'KoreanBold'),
             ('FONTNAME', (0, 1), (-1, -1), 'Korean'),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
         ]))
         return tbl
 
+    # 폰트 경로(환경 맞게 수정 필수)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    font_dir = os.path.join(base_dir, "fonts")
+    font_paths = {
+        "Korean": os.path.join(font_dir, "NanumGothic.ttf"),
+        "KoreanBold": os.path.join(font_dir, "NanumGothicBold.ttf"),
+        "KoreanSerif": os.path.join(font_dir, "NanumMyeongjo.ttf"),
+    }
+    for fam, path in font_paths.items():
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont(fam, path))
+            except Exception as e:
+                print(f"[폰트 등록 실패] {fam} - {e}")
+        else:
+            print(f"[폰트 파일 없음] {path}")
+
+    # 스타일 정의
+    styles = getSampleStyleSheet()
+    TITLE_STYLE = ParagraphStyle(
+        'TITLE',
+        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
+        fontSize=20,
+        leading=34,
+        spaceAfter=18
+    )
+    HEADING_STYLE = ParagraphStyle(
+        'HEADING',
+        fontName='KoreanBold' if 'KoreanBold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold',
+        fontSize=14,
+        leading=23.8,
+        textColor=colors.HexColor('#E31E24'),
+        spaceBefore=16,
+        spaceAfter=10
+    )
+    BODY_STYLE = ParagraphStyle(
+        'BODY',
+        fontName='KoreanSerif' if 'KoreanSerif' in pdfmetrics.getRegisteredFontNames() else 'Times-Roman',
+        fontSize=12,
+        leading=20.4,
+        spaceAfter=6
+    )
+
+    # 페이지 번호 그리기
+    def _page_number(canvas, doc):
+        canvas.setFont('Helvetica', 9)
+        canvas.drawCentredString(A4[0] / 2, 18, f"- {canvas.getPageNumber()} -")
+
+    buff = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buff, pagesize=A4,
+        leftMargin=54, rightMargin=54, topMargin=54, bottomMargin=54
+    )
+    story = []
+
+    # 표지 및 메타 정보
+    story.append(Paragraph("손익개선을 위한 SK에너지 및 경쟁사 비교 분석 보고서", TITLE_STYLE))
+    story.append(Paragraph(
+        f"보고일자: {datetime.now().strftime('%Y년 %m월 %d일')}    보고대상: {report_target}    보고자: {report_author}",
+        BODY_STYLE))
+    story.append(Spacer(1, 12))
+
+    # 1. 재무분석 표 출력
+    if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty:
+        story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
+        df_disp = financial_data[[c for c in financial_data.columns if not str(c).endswith('_원시값')]].copy()
+        tbl = Table([df_disp.columns.tolist()] + df_disp.values.tolist(), repeatRows=1)
+        tbl.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F2F2F2')),
+            ('FONTNAME', (0, 0), (-1, 0), 'KoreanBold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'KoreanSerif'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 18))
+
+    # 2. Plotly 차트 삽입 (막대, 꺾은선, 선택 차트)
     charts_added = False
 
-    # 2. 시각화 차트 삽입 (Plotly → PNG 변환 및 임시파일 삽입)
     if PLOTLY_AVAILABLE:
         try:
-            # 주요 비율 비교 막대그래프 생성 예시
+            # 주요 비율 막대그래프 (예시)
             if financial_data is not None and hasattr(financial_data, "empty") and not financial_data.empty and '구분' in financial_data.columns:
                 ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
                 if not ratio_rows.empty:
@@ -191,9 +190,7 @@ def create_enhanced_pdf_report(
                                 melt.append({'지표': r['구분'], '회사': comp, '수치': float(val)})
                             except:
                                 pass
-
                     if melt:
-                        import plotly.express as px
                         bar_df = pd.DataFrame(melt)
                         fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', title="주요 비율 비교")
                         img_bytes = _fig_to_png_bytes(fig_bar, 900, 450)
@@ -216,11 +213,9 @@ def create_enhanced_pdf_report(
             story.append(Paragraph(f"막대그래프 생성 오류: {e}", BODY_STYLE))
 
         try:
-            # 분기별 추이 꺾은선 차트 (영업이익률, 매출액)
+            # 분기별 꺾은선 그래프
             if quarterly_df is not None and hasattr(quarterly_df, "empty") and not quarterly_df.empty:
-                import plotly.graph_objects as go
-
-                # 영업이익률 추이
+                # 영업이익률 꺾은선
                 if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
                     fig_line = go.Figure()
                     for comp in quarterly_df['회사'].dropna().unique():
@@ -245,7 +240,7 @@ def create_enhanced_pdf_report(
                     else:
                         story.append(Paragraph("※ 환경 제약으로 차트 이미지는 제외되었습니다.", BODY_STYLE))
 
-                # 매출액 추이
+                # 매출액 꺾은선
                 if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
                     fig_rev = go.Figure()
                     for comp in quarterly_df['회사'].dropna().unique():
@@ -271,7 +266,7 @@ def create_enhanced_pdf_report(
             story.append(Paragraph(f"추이 그래프 생성 오류: {e}", BODY_STYLE))
 
         try:
-            # 선택 차트 추가 삽입
+            # 선택된 추가 차트 삽입
             if selected_charts:
                 if not charts_added:
                     story.append(Paragraph("2. 시각화 차트", HEADING_STYLE))
@@ -299,7 +294,7 @@ def create_enhanced_pdf_report(
             story.append(Paragraph(f"{i}. {title}", BODY_STYLE))
         story.append(Spacer(1, 12))
 
-    # 4. AI 인사이트 (마크다운 특수문자 제거, ASCII 표 변환 포함)
+    # 4. AI 인사이트 영역
     if insights:
         story.append(PageBreak())
         story.append(Paragraph("4. AI 인사이트", HEADING_STYLE))
@@ -324,20 +319,29 @@ def create_enhanced_pdf_report(
             if tbl:
                 story.append(tbl)
 
-    # 5. 옵션: 푸터 표시
+    # 푸터 출력 옵션
     if show_footer:
         story.append(Spacer(1, 24))
         story.append(Paragraph("※ 본 보고서는 대시보드에서 자동 생성되었습니다.", BODY_STYLE))
 
-    # PDF 빌드
+    # PDF 문서 빌드
     doc.build(story, onFirstPage=_page_number, onLaterPages=_page_number)
     buff.seek(0)
     return buff.getvalue()
 
 
-# 테스트 실행 예시
-if __name__ == "__main__":
-    pdf_bytes = create_enhanced_pdf_report()
-    with open("enhanced_korean_pdf_report.pdf", "wb") as f:
-        f.write(pdf_bytes)
-    print("PDF 파일이 생성되었습니다: enhanced_korean_pdf_report.pdf")
+def create_excel_report(financial_data: pd.DataFrame) -> bytes:
+    """
+    간단한 Excel 보고서 생성 (financial_data 필수)
+    """
+    import pandas as pd
+
+    if financial_data is None or financial_data.empty:
+        raise ValueError("financial_data가 없습니다.")
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        financial_data.to_excel(writer, index=False, sheet_name='재무데이터')
+        writer.save()
+    output.seek(0)
+    return output.read()
