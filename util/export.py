@@ -114,7 +114,7 @@ def create_enhanced_pdf_report(
     font_paths = {
         "Korean":      [os.path.join(base_dir, "fonts", "NanumGothic.ttf")],
         "KoreanBold":  [os.path.join(base_dir, "fonts", "NanumGothicBold.ttf")],
-        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjo.ttf")]
+        "KoreanSerif": [os.path.join(base_dir, "fonts", "NanumMyeongjoBold.ttf")]  # 실제 파일명으로 수정
     }
     for family, paths in font_paths.items():
         for p in paths:
