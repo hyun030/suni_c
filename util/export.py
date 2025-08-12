@@ -369,7 +369,7 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
             story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
         
         # 1-3. 차트 이미지들 추가
-        if chart_images:
+        if chart_images and len(chart_images) > 0:
             story.append(Spacer(1, 12))
             story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
             story.append(Spacer(1, 8))
@@ -384,11 +384,17 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
                     except Exception as e:
                         print(f"⚠️ 차트 {i} 추가 실패: {e}")
                         story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
+                else:
+                    print(f"⚠️ 차트 파일이 없음: {chart_path}")
+        else:
+            print("ℹ️ 추가할 차트 이미지가 없습니다")
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
     except Exception as e:
         print(f"❌ 재무분석 섹션 추가 오류: {e}")
+        import traceback
+        print(f"상세 오류: {traceback.format_exc()}")
 
 
 def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, header_color='#E31E24'):
@@ -530,18 +536,32 @@ def create_enhanced_pdf_report(
     financial_data=None,
     news_data=None,
     insights=None,
-    chart_images=None,  # Streamlit 차트 이미지 경로들의 리스트
+    selected_charts=None,  # 기존 매개변수명 유지 (하위 호환성)
     quarterly_df=None,
     show_footer=False,
     report_target="SK이노베이션 경영진",
     report_author="보고자 미기재",
-    gpt_api_key=None,  # GPT API 키
+    gpt_api_key=None,  # GPT API 키 (새로 추가)
+    chart_images=None,  # Streamlit 차트 이미지 경로들 (새로 추가)
     font_paths=None,
 ):
     """향상된 PDF 보고서 생성 (GPT 전략 제안 포함)"""
     
     try:
         print("🔄 PDF 보고서 생성 시작...")
+        
+        # 하위 호환성: selected_charts가 있으면 chart_images로 변환
+        if selected_charts and not chart_images:
+            print("🔄 selected_charts를 chart_images로 변환 중...")
+            if isinstance(selected_charts, list):
+                # Plotly 차트 객체들인 경우 이미지로 변환
+                chart_images = capture_streamlit_charts(selected_charts)
+            else:
+                chart_images = selected_charts
+        
+        # chart_images가 없으면 빈 리스트로 설정
+        if not chart_images:
+            chart_images = []
         
         # 폰트 등록
         registered_fonts = register_fonts_safe()
