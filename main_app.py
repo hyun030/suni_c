@@ -19,12 +19,14 @@ import config
 from data.loader import DartAPICollector, QuarterlyDataCollector, SKNewsCollector
 from data.preprocess import SKFinancialDataProcessor, FinancialDataProcessor 
 from insight.gemini_api import GeminiInsightGenerator
-from visualization.charts import (
+
+# ✅ 수정된 import - util.export에서 모든 함수 가져오기
+from util.export import (
     create_sk_bar_chart, create_sk_radar_chart, 
     create_quarterly_trend_chart, create_gap_trend_chart, 
-    create_gap_analysis, create_gap_chart, PLOTLY_AVAILABLE
+    create_gap_analysis, create_gap_chart, PLOTLY_AVAILABLE,
+    create_excel_report, create_enhanced_pdf_report
 )
-from util.export import create_excel_report, create_enhanced_pdf_report
 
 def initialize_session_state():
     session_vars = [
@@ -195,12 +197,31 @@ def main():
             st.subheader("📊 주요 지표 비교")
             ratio_df = final_df[final_df['구분'].str.contains('%', na=False)]
             raw_cols = [col for col in final_df.columns if col.endswith('_원시값')]
+            
             if not ratio_df.empty and raw_cols:
                 chart_df = pd.melt(ratio_df, id_vars=['구분'], value_vars=raw_cols, var_name='회사', value_name='수치')
                 chart_df['회사'] = chart_df['회사'].str.replace('_원시값', '')
+                
                 if PLOTLY_AVAILABLE:
-                    st.plotly_chart(create_sk_bar_chart(chart_df), use_container_width=True, key="dart_bar_chart")
-                    st.plotly_chart(create_sk_radar_chart(chart_df), use_container_width=True, key="dart_radar_chart")
+                    # ✅ 차트 표시 및 디버그 정보
+                    st.info(f"📊 차트 데이터: {len(chart_df)}개 항목, {len(chart_df['회사'].unique())}개 회사")
+                    
+                    # 막대 차트
+                    bar_chart = create_sk_bar_chart(chart_df)
+                    if bar_chart:
+                        st.plotly_chart(bar_chart, use_container_width=True, key="dart_bar_chart")
+                    else:
+                        st.error("❌ 막대 차트 생성 실패")
+                    
+                    # 레이더 차트
+                    radar_chart = create_sk_radar_chart(chart_df)
+                    if radar_chart:
+                        st.plotly_chart(radar_chart, use_container_width=True, key="dart_radar_chart")
+                    else:
+                        st.error("❌ 레이더 차트 생성 실패")
+                else:
+                    st.error("❌ Plotly/kaleido가 설치되지 않았습니다.")
+                    st.info("💡 다음 명령어로 설치하세요: pip install plotly kaleido")
 
         if 'quarterly_data' in st.session_state and st.session_state.quarterly_data is not None:
             st.markdown("---")
@@ -222,9 +243,23 @@ def main():
             quarterly_df_sorted = sort_quarterly_by_quarter(quarterly_df)
             st.dataframe(quarterly_df_sorted, use_container_width=True)
 
+            # ✅ 분기별 차트 표시
             if PLOTLY_AVAILABLE:
-                st.plotly_chart(create_quarterly_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_quarterly_trend")
-                st.plotly_chart(create_gap_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_gap_trend")
+                st.markdown("**📈 분기별 시각화 차트**")
+                
+                # 분기별 매출액 추이
+                quarterly_trend = create_quarterly_trend_chart(st.session_state.quarterly_data)
+                if quarterly_trend:
+                    st.plotly_chart(quarterly_trend, use_container_width=True, key="dart_quarterly_trend")
+                else:
+                    st.warning("⚠️ 분기별 매출액 추이 차트 생성 실패")
+                
+                # 분기별 갭 추이
+                gap_trend = create_gap_trend_chart(st.session_state.quarterly_data)
+                if gap_trend:
+                    st.plotly_chart(gap_trend, use_container_width=True, key="dart_gap_trend")
+                else:
+                    st.warning("⚠️ 분기별 갭 추이 차트 생성 실패")
 
         # 갭차이 분석 추가 (완전한 버전)
         if 'financial_data' in st.session_state and st.session_state.financial_data is not None:
@@ -232,16 +267,21 @@ def main():
             st.subheader("📈 갭차이 분석")
             final_df = st.session_state.financial_data
             raw_cols = [col for col in final_df.columns if col.endswith('_원시값')]
+            
             if raw_cols and len(raw_cols) > 1:
                 gap_analysis = create_gap_analysis(final_df, raw_cols)
                 if not gap_analysis.empty:
                     st.markdown("**📊 SK에너지 대비 경쟁사 갭차이 분석표**")
                     st.dataframe(gap_analysis, use_container_width=True)
                     
-                    # 갭차이 시각화
+                    # ✅ 갭차이 시각화
                     if PLOTLY_AVAILABLE:
                         st.markdown("**📈 갭차이 시각화 차트**")
-                        st.plotly_chart(create_gap_chart(gap_analysis), use_container_width=True, key="dart_gap_chart")
+                        gap_chart = create_gap_chart(gap_analysis)
+                        if gap_chart:
+                            st.plotly_chart(gap_chart, use_container_width=True, key="dart_gap_chart")
+                        else:
+                            st.warning("⚠️ 갭차이 차트 생성 실패")
                 else:
                     st.warning("⚠️ 갭차이 분석을 위한 충분한 데이터가 없습니다. (최소 2개 회사 필요)")
             else:
@@ -304,9 +344,11 @@ def main():
             st.subheader("📊 주요 지표 비교")
             ratio_df = final_df[final_df['구분'].str.contains('%', na=False)]
             raw_cols = [col for col in final_df.columns if col.endswith('_원시값')]
+            
             if not ratio_df.empty and raw_cols:
                 chart_df = pd.melt(ratio_df, id_vars=['구분'], value_vars=raw_cols, var_name='회사', value_name='수치')
                 chart_df['회사'] = chart_df['회사'].str.replace('_원시값', '')
+                
                 if PLOTLY_AVAILABLE:
                     st.plotly_chart(create_sk_bar_chart(chart_df), use_container_width=True, key="manual_bar_chart")
                     st.plotly_chart(create_sk_radar_chart(chart_df), use_container_width=True, key="manual_radar_chart")
