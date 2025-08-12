@@ -127,7 +127,7 @@ def create_excel_report(financial_data=None, news_data=None, insights=None):
     return output.getvalue()
 
 
-def clean_ai_text(raw: str):
+def clean_ai_text(raw):
     """AI 인사이트 텍스트 정리"""
     raw = re.sub(r'[*_#>~]', '', raw)  # 마크다운 문자 제거
     blocks = []
@@ -209,6 +209,43 @@ def fig_to_png_bytes(fig, width=900, height=450):
     except Exception as e:
         st.error(f"차트 이미지 변환 전체 실패: {e}")
         return None
+
+
+def create_adaptive_table(data, registered_fonts, header_color='#E31E24', max_col_width=80):
+    """화면 크기에 맞춰 자동으로 조정되는 테이블 생성"""
+    if data is None or data.empty:
+        return None
+    
+    # 컬럼 수가 많으면 세로형으로 변환
+    if len(data.columns) > 6:
+        # 가로가 긴 테이블을 세로형으로 변환
+        melted_data = []
+        for _, row in data.iterrows():
+            for col in data.columns:
+                melted_data.append([row.get('구분', ''), col, str(row[col])])
+        
+        table_data = [['지표', '회사', '값']] + melted_data
+        col_widths = [120, 80, 100]
+    else:
+        # 일반 테이블
+        table_data = [data.columns.tolist()] + data.values.tolist()
+        # 컬럼 너비 자동 조정
+        col_widths = [min(max_col_width, max(len(str(col))*6 + 20, 60)) for col in data.columns]
+    
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor(header_color)),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+        ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
+    ]))
+    
+    return tbl
 
 
 def create_financial_charts(financial_data, quarterly_df):
@@ -428,105 +465,7 @@ def create_financial_charts(financial_data, quarterly_df):
         st.error(f"분기별 추이 차트 생성 오류: {e}")
     
     st.info(f"총 {len(charts)}개 차트 생성 완료")
-    return charts 오류: {e}")
-    
-    # 3. 분기별 추이 차트들
-    try:
-        if quarterly_df is not None and not quarterly_df.empty:
-            # 영업이익률 추이
-            if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
-                fig_line = go.Figure()
-                colors_map = {'SK에너지': '#E31E24', '경쟁사1': '#1f77b4', '경쟁사2': '#ff7f0e', 
-                             '경쟁사3': '#2ca02c', '경쟁사4': '#d62728'}
-                
-                for company in quarterly_df['회사'].dropna().unique():
-                    company_data = quarterly_df[quarterly_df['회사'] == company].copy()
-                    company_data = company_data.sort_values('분기')
-                    
-                    fig_line.add_trace(go.Scatter(
-                        x=company_data['분기'],
-                        y=company_data['영업이익률'],
-                        mode='lines+markers',
-                        name=company,
-                        line=dict(width=3, color=colors_map.get(company, '#333333')),
-                        marker=dict(size=8)
-                    ))
-                
-                fig_line.update_layout(
-                    title="분기별 영업이익률 추이",
-                    xaxis_title="분기",
-                    yaxis_title="영업이익률 (%)",
-                    height=400,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                charts.append(("분기별 영업이익률 추이", fig_line))
-            
-            # 매출액 추이
-            if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
-                fig_rev = go.Figure()
-                
-                for company in quarterly_df['회사'].dropna().unique():
-                    company_data = quarterly_df[quarterly_df['회사'] == company].copy()
-                    company_data = company_data.sort_values('분기')
-                    
-                    fig_rev.add_trace(go.Scatter(
-                        x=company_data['분기'],
-                        y=company_data['매출액'],
-                        mode='lines+markers',
-                        name=company,
-                        line=dict(width=3, color=colors_map.get(company, '#333333')),
-                        marker=dict(size=8)
-                    ))
-                
-                fig_rev.update_layout(
-                    title="분기별 매출액 추이",
-                    xaxis_title="분기",
-                    yaxis_title="매출액 (조원)",
-                    height=400,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                charts.append(("분기별 매출액 추이", fig_rev))
-    except Exception as e:
-        st.error(f"분기별 추이 차트 생성 오류: {e}")
-    
     return charts
-
-
-def create_adaptive_table(data, registered_fonts, header_color='#E31E24', max_col_width=80):
-    """화면 크기에 맞춰 자동으로 조정되는 테이블 생성"""
-    if data is None or data.empty:
-        return None
-    
-    # 컬럼 수가 많으면 세로형으로 변환
-    if len(data.columns) > 6:
-        # 가로가 긴 테이블을 세로형으로 변환
-        melted_data = []
-        for _, row in data.iterrows():
-            for col in data.columns:
-                melted_data.append([row.get('구분', ''), col, str(row[col])])
-        
-        table_data = [['지표', '회사', '값']] + melted_data
-        col_widths = [120, 80, 100]
-    else:
-        # 일반 테이블
-        table_data = [data.columns.tolist()] + data.values.tolist()
-        # 컬럼 너비 자동 조정
-        col_widths = [min(max_col_width, max(len(str(col))*6 + 20, 60)) for col in data.columns]
-    
-    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor(header_color)),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
-        ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#F7F7F7')]),
-    ]))
-    
-    return tbl
 
 
 def add_financial_data_section(story, financial_data, quarterly_df, registered_fonts, HEADING_STYLE, BODY_STYLE):
