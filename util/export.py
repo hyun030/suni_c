@@ -489,7 +489,7 @@ def register_fonts_safe():
     font_paths = get_font_paths()
     registered_fonts = {}
     
-    # 기본 폰트 설정
+    # 기본 폰트 설정 (한글 지원)
     default_fonts = {
         "Korean": "Helvetica",
         "KoreanBold": "Helvetica-Bold", 
@@ -505,10 +505,16 @@ def register_fonts_safe():
                 registered_fonts[font_name] = font_name
             except Exception as e:
                 print(f"⚠️ 폰트 등록 실패 ({font_name}): {e}")
+                print(f"🔄 기본 폰트로 대체: {default_font}")
                 registered_fonts[font_name] = default_font
         else:
             registered_fonts[font_name] = default_font
             print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
+    
+    # 폰트 등록 결과 출력
+    print(f"📝 최종 폰트 설정:")
+    for name, font in registered_fonts.items():
+        print(f"  - {name}: {font}")
     
     return registered_fonts
 
@@ -755,14 +761,14 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
     """재무분석 결과 섹션 추가 (표 + 차트 이미지)"""
     try:
         print("🔄 재무분석 섹션 추가 중...")
-        story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
+        story.append(Paragraph("1. Financial Analysis Results", HEADING_STYLE))
         
         # 1-1. 분기별 재무지표 상세 데이터
         if quarterly_df is not None and not quarterly_df.empty:
-            add_chunked_table(story, quarterly_df, "1-1. 분기별 재무지표 상세 데이터", 
+            add_chunked_table(story, quarterly_df, "1-1. Quarterly Financial Data", 
                              registered_fonts, BODY_STYLE, '#E6F3FF')
         else:
-            story.append(Paragraph("1-1. 분기별 재무지표 상세 데이터: 데이터가 없습니다.", BODY_STYLE))
+            story.append(Paragraph("1-1. Quarterly Financial Data: No data available", BODY_STYLE))
         
         story.append(Spacer(1, 12))
         
@@ -770,10 +776,10 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         if financial_data is not None and not financial_data.empty:
             display_cols = [c for c in financial_data.columns if not str(c).endswith('_원시값')]
             df_display = financial_data[display_cols].copy()
-            add_chunked_table(story, df_display, "1-2. SK에너지 대비 경쟁사 갭차이 분석", 
+            add_chunked_table(story, df_display, "1-2. Competitive Gap Analysis", 
                              registered_fonts, BODY_STYLE, '#F2F2F2')
         else:
-            story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
+            story.append(Paragraph("1-2. Competitive Gap Analysis: No data available", BODY_STYLE))
         
         # 1-3. 차트 이미지들 추가 (상세 디버깅)
         print(f"🔍 chart_images 확인: {chart_images}")
@@ -782,7 +788,7 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         
         if chart_images and len(chart_images) > 0:
             story.append(Spacer(1, 12))
-            story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
+            story.append(Paragraph("1-3. Visualization Charts", BODY_STYLE))
             story.append(Spacer(1, 8))
             
             for i, chart_path in enumerate(chart_images, 1):
@@ -795,23 +801,23 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
                         print(f"🔍 차트 {i} 파일 크기: {file_size} bytes")
                         
                         if file_size > 0:
-                            story.append(Paragraph(f"차트 {i}", BODY_STYLE))
+                            story.append(Paragraph(f"Chart {i}", BODY_STYLE))
                             story.append(RLImage(chart_path, width=500, height=300))
                             story.append(Spacer(1, 16))
                             print(f"✅ 차트 {i} PDF에 추가 완료")
                         else:
                             print(f"❌ 차트 {i} 파일이 비어있음")
-                            story.append(Paragraph(f"차트 {i}: 파일이 비어있습니다", BODY_STYLE))
+                            story.append(Paragraph(f"Chart {i}: Empty file", BODY_STYLE))
                     except Exception as e:
                         print(f"⚠️ 차트 {i} 추가 실패: {e}")
-                        story.append(Paragraph(f"차트 {i}: 이미지 로드 실패 - {str(e)}", BODY_STYLE))
+                        story.append(Paragraph(f"Chart {i}: Image load failed", BODY_STYLE))
                 else:
                     print(f"⚠️ 차트 파일이 없음: {chart_path}")
-                    story.append(Paragraph(f"차트 {i}: 파일을 찾을 수 없습니다", BODY_STYLE))
+                    story.append(Paragraph(f"Chart {i}: File not found", BODY_STYLE))
         else:
             print("⚠️ chart_images가 비어있거나 None입니다")
             story.append(Spacer(1, 12))
-            story.append(Paragraph("1-3. 시각화 차트: 차트 이미지가 생성되지 않았습니다.", BODY_STYLE))
+            story.append(Paragraph("1-3. Visualization Charts: No charts generated", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -1000,73 +1006,105 @@ def create_enhanced_pdf_report(
         # 폰트 등록
         registered_fonts = register_fonts_safe()
         
-        # 스타일 정의
-        TITLE_STYLE = ParagraphStyle(
-            'Title',
-            fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
-            fontSize=20,
-            leading=30,
-            spaceAfter=15,
-            alignment=1,
-        )
-        HEADING_STYLE = ParagraphStyle(
-            'Heading',
-            fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
-            fontSize=14,
-            leading=23,
-            textColor=colors.HexColor('#E31E24'),
-            spaceBefore=16,
-            spaceAfter=10,
-        )
-        BODY_STYLE = ParagraphStyle(
-            'Body',
-            fontName=registered_fonts.get('KoreanSerif', 'Times-Roman'),
-            fontSize=12,
-            leading=18,
-            spaceAfter=6,
-        )
+        # 스타일 정의 (안전한 폰트 설정)
+        try:
+            TITLE_STYLE = ParagraphStyle(
+                'Title',
+                fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
+                fontSize=18,  # 폰트 크기 약간 줄임
+                leading=28,
+                spaceAfter=15,
+                alignment=1,
+            )
+            HEADING_STYLE = ParagraphStyle(
+                'Heading',
+                fontName=registered_fonts.get('KoreanBold', 'Helvetica-Bold'),
+                fontSize=13,  # 폰트 크기 약간 줄임
+                leading=20,
+                textColor=colors.HexColor('#E31E24'),
+                spaceBefore=16,
+                spaceAfter=10,
+            )
+            BODY_STYLE = ParagraphStyle(
+                'Body',
+                fontName=registered_fonts.get('Korean', 'Helvetica'),  # KoreanSerif 대신 Korean 사용
+                fontSize=11,  # 폰트 크기 약간 줄임
+                leading=16,
+                spaceAfter=6,
+            )
+            print("✅ PDF 스타일 정의 완료")
+        except Exception as e:
+            print(f"⚠️ 스타일 정의 실패: {e}")
+            # 기본 스타일로 대체
+            styles = getSampleStyleSheet()
+            TITLE_STYLE = styles['Title']
+            HEADING_STYLE = styles['Heading1']
+            BODY_STYLE = styles['Normal']
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
 
         story = []
         
-        # 표지
-        story.append(Paragraph("손익개선을 위한 SK에너지 및 경쟁사 비교 분석 보고서", TITLE_STYLE))
-        story.append(Spacer(1, 20))
+        # 표지 (안전한 제목)
+        try:
+            story.append(Paragraph("SK Energy Competitive Analysis Report", TITLE_STYLE))
+            story.append(Spacer(1, 20))
+        except Exception as e:
+            print(f"⚠️ 제목 추가 실패: {e}")
+            story.append(Paragraph("Analysis Report", TITLE_STYLE))
+            story.append(Spacer(1, 20))
         
-        # 보고서 정보
-        report_info = f"""
-        <b>보고일자:</b> {datetime.now().strftime('%Y년 %m월 %d일')}<br/>
-        <b>보고대상:</b> {safe_str_convert(report_target)}<br/>
-        <b>보고자:</b> {safe_str_convert(report_author)}
-        """
-        story.append(Paragraph(report_info, BODY_STYLE))
-        story.append(Spacer(1, 30))
+        # 보고서 정보 (안전한 텍스트 처리)
+        try:
+            report_info = f"""
+            <b>Report Date:</b> {datetime.now().strftime('%Y-%m-%d')}<br/>
+            <b>Target:</b> {safe_str_convert(report_target)}<br/>
+            <b>Author:</b> {safe_str_convert(report_author)}
+            """
+            story.append(Paragraph(report_info, BODY_STYLE))
+            story.append(Spacer(1, 30))
+        except Exception as e:
+            print(f"⚠️ 보고서 정보 추가 실패: {e}")
+            # 영어로 대체
+            report_info_en = f"""
+            <b>Report Date:</b> {datetime.now().strftime('%Y-%m-%d')}<br/>
+            <b>Target:</b> SK Innovation Management<br/>
+            <b>Author:</b> Dashboard System
+            """
+            story.append(Paragraph(report_info_en, BODY_STYLE))
+            story.append(Spacer(1, 30))
 
-        # 1. 재무분석 결과 (표 + 차트 이미지)
-        add_financial_data_section(story, financial_data, quarterly_df, chart_images, 
-                                   registered_fonts, HEADING_STYLE, BODY_STYLE)
-        
-        # 2. AI 인사이트
-        story.append(Paragraph("2. AI 분석 인사이트", HEADING_STYLE))
-        add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE)
-        
-        # 3. GPT 기반 전략 제안 (AI 인사이트가 있을 때만)
-        if insights:
-            print("🔄 GPT 전략 제안 생성 중...")
-            strategic_recommendations = generate_strategic_recommendations(
-                insights, financial_data, gpt_api_key
-            )
-            story.append(Paragraph("3. SK에너지 전략 제안", HEADING_STYLE))
-            add_strategic_recommendations_section(story, strategic_recommendations, 
-                                                registered_fonts, HEADING_STYLE, BODY_STYLE)
-        else:
-            print("⚠️ AI 인사이트가 없어서 GPT 전략 제안을 생성하지 않습니다")
-        
-        # 4. 뉴스 하이라이트 및 종합 분석
-        story.append(Paragraph("4. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
-        add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
+        # 섹션 헤더들도 안전하게 처리
+        try:
+            # 1. 재무분석 결과 (표 + 차트 이미지)
+            add_financial_data_section(story, financial_data, quarterly_df, chart_images, 
+                                       registered_fonts, HEADING_STYLE, BODY_STYLE)
+            
+            # 2. AI 인사이트
+            story.append(Paragraph("2. AI Analysis Insights", HEADING_STYLE))
+            add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE)
+            
+            # 3. GPT 기반 전략 제안 (AI 인사이트가 있을 때만)
+            if insights:
+                print("🔄 GPT 전략 제안 생성 중...")
+                strategic_recommendations = generate_strategic_recommendations(
+                    insights, financial_data, gpt_api_key
+                )
+                story.append(Paragraph("3. Strategic Recommendations", HEADING_STYLE))
+                add_strategic_recommendations_section(story, strategic_recommendations, 
+                                                    registered_fonts, HEADING_STYLE, BODY_STYLE)
+            else:
+                print("⚠️ AI 인사이트가 없어서 GPT 전략 제안을 생성하지 않습니다")
+            
+            # 4. 뉴스 하이라이트 및 종합 분석
+            story.append(Paragraph("4. News Analysis", HEADING_STYLE))
+            add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
+
+        except Exception as e:
+            print(f"⚠️ 콘텐츠 추가 중 오류: {e}")
+            # 최소한의 콘텐츠라도 추가
+            story.append(Paragraph("Content generation error occurred", BODY_STYLE))
 
         # 푸터 (선택사항)
         if show_footer:
