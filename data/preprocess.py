@@ -82,15 +82,16 @@ class FinancialDataProcessor:
                 st.error("❌ XBRL fact를 읽지 못했습니다.")
                 return None
 
-            # report type: end 월로 판정(3/6/9/12)
+            # report type: 최신 연도의 최대 종료월로 판정
             rpt = self._guess_report_type_by_month(facts)
             if self.debug:
                 with st.expander("🧭 XBRL Context 분류 디버그"):
-                    st.write(f"ReportType: {rpt}")
+                    latest_year = self._latest_duration_year(facts)
+                    st.write(f"ReportType: {rpt}, LatestYear: {latest_year}")
                     sample = facts[['context_id','period_type','start','end']].drop_duplicates().head(20)
                     st.dataframe(sample, use_container_width=True)
 
-            # 연결+KRW+대상 분기 윈도우로 슬라이스
+            # 연결+KRW+대상 분기 윈도우로 슬라이스 (최신 연도 우선)
             sliced = self._slice_to_quarter(facts, rpt)
             if sliced.empty:
                 st.warning("⚠️ QTD 컨텍스트를 못 찾아서 YTD 보정/백업 스캐너로 시도합니다.")
@@ -219,68 +220,84 @@ class FinancialDataProcessor:
         df = df.merge(ctx_df, on='context_id', how='left')
         return df
 
+    # ---- 최신 연도/분기 판정 ----
+    def _latest_duration_year(self, facts: pd.DataFrame) -> int:
+        dur = facts[facts['period_type'] == 'duration'].copy()
+        ends = dur['end'].dropna()
+        if ends.empty:
+            # 안전장치: 전부 instant면 현재 연도 사용
+            return pd.Timestamp.today().year
+        return int(ends.max().year)
+
     def _guess_report_type_by_month(self, facts: pd.DataFrame) -> str:
         dur = facts[facts['period_type']=='duration'].copy()
         if dur['end'].notna().any():
-            m = int(dur['end'].max().month)
-            return {3:'Q1',6:'Q2',9:'Q3',12:'Q4'}.get(m,'Q3')
+            latest_end = dur['end'].max()
+            return {3:'Q1',6:'Q2',9:'Q3',12:'Q4'}.get(int(latest_end.month),'Q3')
         return 'Q3'
 
     # ------------- Quarter slicing -------------
-
     def _slice_to_quarter(self, facts: pd.DataFrame, report_type: str) -> pd.DataFrame:
-        f = facts.copy()
+        # 1) 최신 연도 먼저 결정 (필터 적용 전에)
+        latest_year = self._latest_duration_year(facts)
 
-        # KRW & 연결 우선 필터
+        # 2) KRW & 연결 우선 필터
+        f = facts.copy()
         if 'unit' in f.columns:
             f = f[f['unit'].astype(str).str.contains(_KRW_RE, na=False)]
         if 'is_consolidated' in f.columns and f['is_consolidated'].notna().any():
             cfs = f['is_consolidated'] == True
             if cfs.any(): f = f[cfs]
 
-        dur = f[f['period_type']=='duration'].copy()
-        if dur.empty:
+        # 3) 최신 연도만 남기기 (필터 후 비었다면, 필터 없이 연도만 제한)
+        f_year = f[(f['period_type']=='duration') & (f['end'].dt.year == latest_year)].copy()
+        if f_year.empty:
+            f_year = facts[(facts['period_type']=='duration') & (facts['end'].dt.year == latest_year)].copy()
+
+        if f_year.empty:
             return pd.DataFrame()
 
-        # 대상 연도/월
-        end_max = dur['end'].max()
-        year = end_max.year
-        def pick(start_m, end_m):
-            m = (dur['start'].dt.month==start_m) & (dur['end'].dt.month==end_m) & (dur['end'].dt.year==year)
-            return dur[m]
+        def pick(frame, start_m, end_m):
+            m = (frame['start'].dt.month==start_m) & (frame['end'].dt.month==end_m)
+            return frame[m]
 
         # QTD 우선순위
         if report_type=='Q1':
-            qtd = pick(1,3)
-            ytd = qtd  # Q1은 =YTD
+            qtd = pick(f_year, 1,3)
+            ytd = pick(f_year, 1,3)  # Q1은 YTD==QTD
             prev = pd.DataFrame()
         elif report_type=='Q2':
-            qtd = pick(4,6)
-            ytd = pick(1,6)
-            prev = pick(1,3)
-            if qtd.empty and not ytd.empty and not prev.empty:
-                qtd = self._diff(ytd, prev)  # YTD - Q1
-        elif report_type=='Q3':
-            qtd = pick(7,9)
-            ytd = pick(1,9)
-            prev = pick(1,6)
-            if qtd.empty and not ytd.empty and not prev.empty:
-                qtd = self._diff(ytd, prev)  # YTD - H1
-        else:  # Q4: 분기치(10~12) 있으면 사용, 없으면 연간-9월
-            qtd = pick(10,12)
-            ytd = pick(1,12)
-            prev = pick(1,9)
+            qtd = pick(f_year, 4,6)
+            ytd = pick(f_year, 1,6)
+            prev = pick(f_year, 1,3)
             if qtd.empty and not ytd.empty and not prev.empty:
                 qtd = self._diff(ytd, prev)
+        elif report_type=='Q3':
+            qtd = pick(f_year, 7,9)
+            ytd = pick(f_year, 1,9)
+            prev = pick(f_year, 1,6)
+            if qtd.empty and not ytd.empty and not prev.empty:
+                qtd = self._diff(ytd, prev)
+        else:  # Q4
+            qtd = pick(f_year, 10,12)
+            ytd = pick(f_year, 1,12)
+            prev = pick(f_year, 1,9)
+            if qtd.empty and not ytd.empty and not prev.empty:
+                qtd = self._diff(ytd, prev)
+
+        if self.debug:
+            with st.expander("🔎 최신연도 슬라이스 디버그"):
+                st.write(f"LatestYear={latest_year}, ReportType={report_type}")
+                st.write(f"Rows(QTD)={len(qtd)}, Rows(YTD)={len(ytd) if 'ytd' in locals() else 0}")
 
         return qtd
 
     def _slice_to_quarter_fallback(self, facts: pd.DataFrame, report_type: str) -> pd.DataFrame:
-        """컨텍스트 id 문자열에서 7-9/4-6 등 패턴이 보일 때 보조로 선택"""
-        dur = facts[(facts['period_type']=='duration')].copy()
+        """컨텍스트 id 문자열 패턴 + 최신연도 제한 보조 선택"""
+        latest_year = self._latest_duration_year(facts)
+        dur = facts[(facts['period_type']=='duration') & (facts['end'].dt.year==latest_year)].copy()
         if dur.empty:
             return dur
-        pat = None
         if report_type=='Q3':
             pat = re.compile(r'(7.?01|07.?01).*(9.?30|09.?30)')
         elif report_type=='Q2':
@@ -289,11 +306,8 @@ class FinancialDataProcessor:
             pat = re.compile(r'(1.?01|01.?01).*(3.?31|03.?31)')
         else:
             pat = re.compile(r'(10.?01).*(12.?31)')
-        if pat:
-            mask = dur['context_id'].astype(str).str.contains(pat, regex=True, na=False)
-            cand = dur[mask]
-            return cand
-        return pd.DataFrame()
+        mask = dur['context_id'].astype(str).str.contains(pat, regex=True, na=False)
+        return dur[mask]
 
     def _diff(self, ytd: pd.DataFrame, prev: pd.DataFrame) -> pd.DataFrame:
         """동일 concept/local 기준으로 ytd - prev 차감"""
@@ -301,13 +315,11 @@ class FinancialDataProcessor:
         p = prev[['concept_local','value']].rename(columns={'value':'prev'}).copy()
         out = y.merge(p, on='concept_local', how='left')
         out['value'] = out['value'] - out['prev'].fillna(0)
-        # prev 지우고 새로운 가상 context_id 부여
         out = out.drop(columns=['prev'])
         out['context_id'] = out['context_id'].astype(str) + '_QTD'
         return out
 
     # ------------- Mapping to items -------------
-
     def _facts_to_items(self, df: pd.DataFrame) -> dict:
         if df is None or df.empty:
             return {}
@@ -342,9 +354,7 @@ class FinancialDataProcessor:
         return items
 
     # ------------- Backup scanner -------------
-
     def _backup_scan(self, soup: BeautifulSoup) -> dict:
-        # 숫자 포함 태그들 훑어서 넓은 패턴 매칭
         items, processed = {}, 0
         numeric = [t for t in soup.find_all() if t.string and re.search(r'\d', t.string)]
         for tag in numeric:
@@ -353,9 +363,8 @@ class FinancialDataProcessor:
                 num = float(re.sub(r'[^\d\.-]', '', txt.replace('(', '-').replace(')', '')))
             except Exception:
                 continue
-            if abs(num) < 10000:  # 노이즈 컷
+            if abs(num) < 10000:
                 continue
-            # 태그/부모/속성 합성
             parts = [tag.name.lower() if tag.name else '']
             if tag.attrs:
                 parts.extend([str(v).lower() for v in tag.attrs.values()])
@@ -376,14 +385,12 @@ class FinancialDataProcessor:
         return items
 
     # ------------- Statement / ratios / merge -------------
-
     def _build_statement(self, data: dict, company: str) -> pd.DataFrame:
         order = ['매출액','매출원가','매출총이익','판매비와관리비','영업이익','영업외수익','영업외비용','당기순이익']
         rows = []
         for k in order:
             if k in data:
                 rows.append({'구분': k, company: self._fmt_amt(data[k]), f'{company}_원시값': data[k]})
-        # ratios
         sales = data.get('매출액', 0)
         if sales:
             def r(name, num): rows.append({'구분': name, company: f"{(num/sales)*100:.2f}%", f'{company}_원시값': (num/sales)*100})
