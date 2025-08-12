@@ -159,28 +159,120 @@ def generate_strategic_recommendations(insights, financial_data=None, gpt_api_ke
 
 
 def save_chart_as_image(fig, filename_prefix="chart"):
-    """Streamlit 차트를 이미지 파일로 저장"""
+    """Streamlit 차트를 이미지 파일로 저장 (다양한 차트 타입 지원)"""
     try:
         # 임시 파일 생성
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
         temp_path = temp_file.name
         temp_file.close()
         
+        print(f"🔄 차트 저장 시도: {type(fig)} -> {temp_path}")
+        
         # Plotly 차트인 경우
         if hasattr(fig, 'write_image'):
-            fig.write_image(temp_path, width=800, height=500, scale=2)
+            try:
+                fig.write_image(temp_path, width=800, height=500, scale=2)
+                print(f"✅ Plotly 차트 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ Plotly write_image 실패: {e}")
+                # Plotly 대안 방법
+                try:
+                    import plotly.io as pio
+                    img_bytes = pio.to_image(fig, format='png', width=800, height=500)
+                    with open(temp_path, 'wb') as f:
+                        f.write(img_bytes)
+                    print(f"✅ Plotly pio.to_image 성공")
+                    return temp_path
+                except Exception as e2:
+                    print(f"⚠️ Plotly 대안 방법도 실패: {e2}")
+        
+        # Plotly 객체에서 to_image 메서드가 있는 경우
+        elif hasattr(fig, 'to_image'):
+            try:
+                img_bytes = fig.to_image(format="png", width=800, height=500)
+                with open(temp_path, 'wb') as f:
+                    f.write(img_bytes)
+                print(f"✅ to_image 메서드 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ to_image 메서드 실패: {e}")
+        
         # Matplotlib 차트인 경우  
         elif hasattr(fig, 'savefig'):
-            fig.savefig(temp_path, dpi=300, bbox_inches='tight')
+            try:
+                fig.savefig(temp_path, dpi=300, bbox_inches='tight', facecolor='white')
+                print(f"✅ Matplotlib 차트 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ Matplotlib 저장 실패: {e}")
+        
+        # Altair 차트인 경우
+        elif hasattr(fig, 'save'):
+            try:
+                fig.save(temp_path)
+                print(f"✅ Altair 차트 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ Altair 저장 실패: {e}")
+        
+        # PIL Image인 경우
+        elif hasattr(fig, 'save') and hasattr(fig, 'mode'):
+            try:
+                fig.save(temp_path, 'PNG')
+                print(f"✅ PIL Image 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ PIL Image 저장 실패: {e}")
+        
+        # 기타 객체에서 figure 속성을 찾아보기
+        elif hasattr(fig, 'figure'):
+            try:
+                return save_chart_as_image(fig.figure, filename_prefix)
+            except Exception as e:
+                print(f"⚠️ figure 속성 접근 실패: {e}")
+        
+        # 최후 수단: 객체를 문자열로 변환해서 확인
         else:
-            print(f"⚠️ 지원하지 않는 차트 타입: {type(fig)}")
+            fig_str = str(type(fig))
+            print(f"❌ 지원하지 않는 차트 타입: {fig_str}")
+            print(f"   사용 가능한 속성들: {[attr for attr in dir(fig) if not attr.startswith('_')][:10]}")
+            
+            # 혹시 _repr_png_ 같은 메서드가 있는지 확인
+            if hasattr(fig, '_repr_png_'):
+                try:
+                    png_data = fig._repr_png_()
+                    if png_data:
+                        with open(temp_path, 'wb') as f:
+                            f.write(png_data)
+                        print(f"✅ _repr_png_ 메서드 성공")
+                        return temp_path
+                except Exception as e:
+                    print(f"⚠️ _repr_png_ 실패: {e}")
+            
+            # 파일 삭제하고 None 반환
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
             return None
             
-        print(f"✅ 차트 이미지 저장: {temp_path}")
-        return temp_path
-        
+        # 파일이 실제로 생성되었는지 확인
+        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+            print(f"✅ 차트 이미지 저장: {temp_path} ({os.path.getsize(temp_path)} bytes)")
+            return temp_path
+        else:
+            print(f"❌ 차트 파일이 비어있거나 생성되지 않음")
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            return None
+            
     except Exception as e:
         print(f"❌ 차트 이미지 저장 실패: {e}")
+        import traceback
+        print(f"상세 오류: {traceback.format_exc()}")
         return None
 
 
@@ -443,7 +535,6 @@ def add_strategic_recommendations_section(story, recommendations, registered_fon
     """전략 제안 섹션 추가"""
     try:
         print("🔄 전략 제안 섹션 추가 중...")
-        story.append(Paragraph("2-AI. SK에너지 전략 제안", HEADING_STYLE))
         
         if not recommendations or "생성할 수 없습니다" in recommendations:
             story.append(Paragraph("GPT 기반 전략 제안을 생성할 수 없습니다.", BODY_STYLE))
@@ -553,15 +644,31 @@ def create_enhanced_pdf_report(
         # 하위 호환성: selected_charts가 있으면 chart_images로 변환
         if selected_charts and not chart_images:
             print("🔄 selected_charts를 chart_images로 변환 중...")
-            if isinstance(selected_charts, list):
-                # Plotly 차트 객체들인 경우 이미지로 변환
-                chart_images = capture_streamlit_charts(selected_charts)
+            print(f"selected_charts 타입: {type(selected_charts)}")
+            print(f"selected_charts 길이: {len(selected_charts) if selected_charts else 0}")
+            
+            if isinstance(selected_charts, list) and len(selected_charts) > 0:
+                # 첫 번째 항목을 확인해서 차트 객체인지 이미지 경로인지 판단
+                first_item = selected_charts[0]
+                print(f"첫 번째 항목 타입: {type(first_item)}")
+                
+                if isinstance(first_item, str):
+                    # 이미 이미지 경로들인 경우
+                    chart_images = selected_charts
+                    print("✅ 이미지 경로들로 인식")
+                else:
+                    # Plotly 차트 객체들인 경우 이미지로 변환
+                    print("🔄 차트 객체들을 이미지로 변환 시작...")
+                    chart_images = capture_streamlit_charts(selected_charts)
+                    print(f"✅ {len(chart_images)}개 차트 이미지 생성 완료")
             else:
-                chart_images = selected_charts
+                chart_images = []
+                print("⚠️ selected_charts가 빈 리스트이거나 올바르지 않은 형식")
         
         # chart_images가 없으면 빈 리스트로 설정
         if not chart_images:
             chart_images = []
+            print("ℹ️ 차트 이미지가 없습니다")
         
         # 폰트 등록
         registered_fonts = register_fonts_safe()
@@ -618,16 +725,20 @@ def create_enhanced_pdf_report(
         story.append(Paragraph("2. AI 분석 인사이트", HEADING_STYLE))
         add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE)
         
-        # 2-AI. GPT 기반 전략 제안 (AI 인사이트가 있을 때만)
+        # 3. GPT 기반 전략 제안 (AI 인사이트가 있을 때만) - 섹션 번호 변경
         if insights:
             print("🔄 GPT 전략 제안 생성 중...")
             strategic_recommendations = generate_strategic_recommendations(
                 insights, financial_data, gpt_api_key
             )
+            story.append(Paragraph("3. SK에너지 전략 제안", HEADING_STYLE))
             add_strategic_recommendations_section(story, strategic_recommendations, 
                                                 registered_fonts, HEADING_STYLE, BODY_STYLE)
+        else:
+            print("⚠️ AI 인사이트가 없어서 GPT 전략 제안을 생성하지 않습니다")
         
-        # 3. 뉴스 하이라이트 및 종합 분석
+        # 4. 뉴스 하이라이트 및 종합 분석 - 섹션 번호 변경
+        story.append(Paragraph("4. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
         add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
 
         # 푸터 (선택사항)
@@ -693,12 +804,25 @@ def capture_streamlit_charts(chart_objects):
     """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
     chart_paths = []
     
+    if not chart_objects:
+        print("⚠️ 차트 객체가 없습니다")
+        return chart_paths
+    
+    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
+    
     for i, chart in enumerate(chart_objects):
         if chart is not None:
-            chart_path = save_chart_as_image(chart, f"chart_{i}")
+            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
             if chart_path:
                 chart_paths.append(chart_path)
+                print(f"✅ 차트 {i+1} 성공")
+            else:
+                print(f"❌ 차트 {i+1} 실패")
+        else:
+            print(f"⚠️ 차트 {i+1}이 None입니다")
     
+    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
     return chart_paths
 
 
