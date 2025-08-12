@@ -13,3 +13,5 @@ wordcloud
 matplotlib
 python-dotenv
 openpyxl
+plotly>=5.0.0
+kaleido>=0.2.1
