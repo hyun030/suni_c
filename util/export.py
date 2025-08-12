@@ -565,6 +565,44 @@ def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE
                         continue
                     
                     if ascii_buffer:
+                        tbl = ascii_to_table(ascii_buffer, registered_fonts, '#0066CC', 
+                                           [colors.whitesmoke, colors.HexColor('#F0F8FF')])
+                        if tbl:
+                            story.append(tbl)
+                        story.append(Spacer(1, 12))
+                        ascii_buffer.clear()
+                    
+                    if typ == 'title':
+                        story.append(Paragraph(f"<b>{line}</b>", BODY_STYLE))
+                    else:
+                        story.append(Paragraph(line, BODY_STYLE))
+                
+                if ascii_buffer:
+                    tbl = ascii_to_table(ascii_buffer, registered_fonts, '#0066CC',
+                                       [colors.whitesmoke, colors.HexColor('#F0F8FF')])
+                    if tbl:
+                        story.append(tbl)
+                print("✅ AI 종합 분석 추가 완료")
+            else:
+                story.append(Paragraph("AI 종합 분석이 제공되지 않았습니다.", BODY_STYLE))
+                print("⚠️ AI 종합 분석 없음")
+        else:
+            story.append(Paragraph("뉴스 데이터가 제공되지 않았습니다.", BODY_STYLE))
+            print("⚠️ 뉴스 데이터 없음")
+            
+            if insights:
+                story.append(Paragraph("3-1. 종합 분석 및 시사점", BODY_STYLE))
+                story.append(Spacer(1, 8))
+                
+                blocks = clean_ai_text(insights)
+                ascii_buffer = []
+                
+                for typ, line in blocks:
+                    if '|' in line:
+                        ascii_buffer.append(line)
+                        continue
+                    
+                    if ascii_buffer:
                         tbl = ascii_to_table(ascii_buffer, registered_fonts, '#228B22',
                                            [colors.whitesmoke, colors.HexColor('#F0FFF0')])
                         if tbl:
@@ -725,42 +763,4 @@ def create_enhanced_pdf_report(
             return buffer.getvalue()
         except Exception as e2:
             print(f"❌ 에러 보고서 생성도 실패: {e2}")
-            raise e  # 원본 에러를 다시 발생시킴 clean_ai_text(insights)
-                ascii_buffer = []
-                
-                for typ, line in blocks:
-                    if '|' in line:
-                        ascii_buffer.append(line)
-                        continue
-                    
-                    if ascii_buffer:
-                        tbl = ascii_to_table(ascii_buffer, registered_fonts, '#0066CC', 
-                                           [colors.whitesmoke, colors.HexColor('#F0F8FF')])
-                        if tbl:
-                            story.append(tbl)
-                        story.append(Spacer(1, 12))
-                        ascii_buffer.clear()
-                    
-                    if typ == 'title':
-                        story.append(Paragraph(f"<b>{line}</b>", BODY_STYLE))
-                    else:
-                        story.append(Paragraph(line, BODY_STYLE))
-                
-                if ascii_buffer:
-                    tbl = ascii_to_table(ascii_buffer, registered_fonts, '#0066CC',
-                                       [colors.whitesmoke, colors.HexColor('#F0F8FF')])
-                    if tbl:
-                        story.append(tbl)
-                print("✅ AI 종합 분석 추가 완료")
-            else:
-                story.append(Paragraph("AI 종합 분석이 제공되지 않았습니다.", BODY_STYLE))
-                print("⚠️ AI 종합 분석 없음")
-        else:
-            story.append(Paragraph("뉴스 데이터가 제공되지 않았습니다.", BODY_STYLE))
-            print("⚠️ 뉴스 데이터 없음")
-            
-            if insights:
-                story.append(Paragraph("3-1. 종합 분석 및 시사점", BODY_STYLE))
-                story.append(Spacer(1, 8))
-                
-                blocks =
+            raise e  # 원본 에러를 다시 발생시킴
