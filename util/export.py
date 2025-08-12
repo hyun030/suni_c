@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+완전한 PDF/Excel 보고서 생성 모듈 (kaleido 포함)
+설치 필요: pip install kaleido plotly reportlab pandas openpyxl
+"""
+
 import io
 import os
 import tempfile
@@ -17,22 +22,34 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# OpenAI GPT 연동을 위한 import (필요시)
+# OpenAI GPT 연동을 위한 import (선택사항)
 try:
     import openai
     GPT_AVAILABLE = True
 except ImportError:
     GPT_AVAILABLE = False
+    print("⚠️ OpenAI 패키지가 없습니다. GPT 기능을 사용하려면 'pip install openai'를 실행하세요.")
 
-# Plotly import 및 사용 가능 여부 체크
+# Plotly import 및 kaleido 체크
 try:
     import plotly.express as px
     import plotly.graph_objects as go
-    PLOTLY_AVAILABLE = True
-    print("✅ Plotly 라이브러리 로드 성공")
+    import plotly.io as pio
+    
+    # kaleido 패키지 체크
+    try:
+        import kaleido
+        PLOTLY_AVAILABLE = True
+        print("✅ Plotly 및 kaleido 라이브러리 로드 성공")
+    except ImportError:
+        PLOTLY_AVAILABLE = False
+        print("❌ kaleido가 설치되지 않았습니다. 다음 명령어로 설치하세요:")
+        print("   pip install kaleido")
+        
 except ImportError as e:
     PLOTLY_AVAILABLE = False
     print(f"⚠️ Plotly 라이브러리 로드 실패: {e}")
+    print("다음 명령어로 설치하세요: pip install plotly kaleido")
 
 
 def get_company_color(company, companies):
@@ -58,6 +75,7 @@ def get_company_color(company, companies):
 def create_sk_bar_chart(chart_df: pd.DataFrame):
     """SK에너지 강조 막대 차트"""
     if not PLOTLY_AVAILABLE or chart_df.empty: 
+        print("⚠️ Plotly/kaleido가 없거나 데이터가 비어있어 차트를 생성할 수 없습니다.")
         return None
     
     companies = chart_df['회사'].unique()
@@ -79,6 +97,7 @@ def create_sk_bar_chart(chart_df: pd.DataFrame):
 def create_sk_radar_chart(chart_df):
     """SK에너지 중심 레이더 차트 (지표별 Min-Max 정규화 적용)"""
     if chart_df.empty or not PLOTLY_AVAILABLE:
+        print("⚠️ Plotly/kaleido가 없거나 데이터가 비어있어 레이더 차트를 생성할 수 없습니다.")
         return None
     
     companies = chart_df['회사'].unique() if '회사' in chart_df.columns else []
@@ -171,6 +190,7 @@ def create_sk_radar_chart(chart_df):
 def create_quarterly_trend_chart(quarterly_df: pd.DataFrame):
     """분기별 추이 혼합 차트"""
     if not PLOTLY_AVAILABLE or quarterly_df.empty: 
+        print("⚠️ Plotly/kaleido가 없거나 데이터가 비어있어 분기별 차트를 생성할 수 없습니다.")
         return None
 
     fig = go.Figure()
@@ -198,6 +218,7 @@ def create_quarterly_trend_chart(quarterly_df: pd.DataFrame):
 def create_gap_trend_chart(quarterly_df: pd.DataFrame):
     """분기별 갭 추이 차트"""
     if not PLOTLY_AVAILABLE or quarterly_df.empty: 
+        print("⚠️ Plotly/kaleido가 없거나 데이터가 비어있어 갭 추이 차트를 생성할 수 없습니다.")
         return None
 
     fig = go.Figure()
@@ -276,6 +297,7 @@ def create_gap_analysis(financial_df: pd.DataFrame, raw_cols: list):
 def create_gap_chart(gap_analysis_df: pd.DataFrame):
     """갭차이 시각화 차트"""
     if not PLOTLY_AVAILABLE or gap_analysis_df.empty:
+        print("⚠️ Plotly/kaleido가 없거나 데이터가 비어있어 갭 차트를 생성할 수 없습니다.")
         return None
     
     # 갭% 컬럼만 추출
@@ -325,6 +347,96 @@ def create_gap_chart(gap_analysis_df: pd.DataFrame):
     )
     
     return fig
+
+
+def save_chart_as_image(fig, filename_prefix="chart"):
+    """Plotly 차트를 이미지 파일로 저장 (kaleido 사용)"""
+    try:
+        if not PLOTLY_AVAILABLE:
+            print("❌ Plotly/kaleido가 설치되지 않아 차트를 저장할 수 없습니다.")
+            print("다음 명령어로 설치하세요: pip install plotly kaleido")
+            return None
+            
+        # 임시 파일 생성
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        print(f"🔄 차트 저장 시도: {type(fig)} -> {temp_path}")
+        
+        # Plotly 차트를 고해상도 PNG로 저장 (kaleido 사용)
+        if hasattr(fig, 'write_image'):
+            try:
+                fig.write_image(
+                    temp_path, 
+                    format='png',
+                    width=1000,    # 고해상도
+                    height=600, 
+                    scale=2,       # 2배 확대로 선명도 증가
+                    engine='kaleido'  # kaleido 엔진 명시적 지정
+                )
+                print(f"✅ Plotly 차트 저장 성공 (kaleido 사용)")
+                
+                # 파일이 실제로 생성되었는지 확인
+                if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                    print(f"✅ 차트 이미지 저장: {temp_path} ({os.path.getsize(temp_path)} bytes)")
+                    return temp_path
+                else:
+                    print(f"❌ 차트 파일이 비어있거나 생성되지 않음")
+                    return None
+                    
+            except Exception as e:
+                print(f"⚠️ kaleido를 사용한 차트 저장 실패: {e}")
+                
+                # 대안: plotly.io 사용
+                try:
+                    import plotly.io as pio
+                    img_bytes = pio.to_image(fig, format='png', width=1000, height=600, scale=2)
+                    with open(temp_path, 'wb') as f:
+                        f.write(img_bytes)
+                    print(f"✅ plotly.io 대안 방법 성공")
+                    return temp_path
+                except Exception as e2:
+                    print(f"⚠️ plotly.io 대안 방법도 실패: {e2}")
+                    return None
+        else:
+            print(f"❌ 지원하지 않는 차트 타입: {type(fig)}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ 차트 이미지 저장 실패: {e}")
+        return None
+
+
+def capture_streamlit_charts(chart_objects):
+    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
+    chart_paths = []
+    
+    if not chart_objects:
+        print("⚠️ 차트 객체가 없습니다")
+        return chart_paths
+    
+    if not PLOTLY_AVAILABLE:
+        print("❌ Plotly/kaleido가 설치되지 않아 차트 변환을 할 수 없습니다.")
+        print("다음 명령어로 설치하세요: pip install plotly kaleido")
+        return chart_paths
+    
+    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
+    
+    for i, chart in enumerate(chart_objects):
+        if chart is not None:
+            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
+            if chart_path:
+                chart_paths.append(chart_path)
+                print(f"✅ 차트 {i+1} 성공")
+            else:
+                print(f"❌ 차트 {i+1} 실패")
+        else:
+            print(f"⚠️ 차트 {i+1}이 None입니다")
+    
+    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
+    return chart_paths
 
 
 def get_font_paths():
@@ -458,96 +570,6 @@ def generate_strategic_recommendations(insights, financial_data=None, gpt_api_ke
     except Exception as e:
         print(f"❌ GPT 전략 제안 생성 실패: {e}")
         return f"전략 제안 생성 중 오류가 발생했습니다: {str(e)}"
-
-
-def save_chart_as_image(fig, filename_prefix="chart"):
-    """Streamlit 차트를 이미지 파일로 저장"""
-    try:
-        # 임시 파일 생성
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        print(f"🔄 차트 저장 시도: {type(fig)} -> {temp_path}")
-        
-        # Plotly 차트인 경우
-        if hasattr(fig, 'write_image'):
-            try:
-                fig.write_image(temp_path, width=800, height=500, scale=2)
-                print(f"✅ Plotly 차트 저장 성공")
-                return temp_path
-            except Exception as e:
-                print(f"⚠️ Plotly write_image 실패: {e}")
-                # Plotly 대안 방법
-                try:
-                    import plotly.io as pio
-                    img_bytes = pio.to_image(fig, format='png', width=800, height=500)
-                    with open(temp_path, 'wb') as f:
-                        f.write(img_bytes)
-                    print(f"✅ Plotly pio.to_image 성공")
-                    return temp_path
-                except Exception as e2:
-                    print(f"⚠️ Plotly 대안 방법도 실패: {e2}")
-        
-        # Matplotlib 차트인 경우  
-        elif hasattr(fig, 'savefig'):
-            try:
-                fig.savefig(temp_path, dpi=300, bbox_inches='tight', facecolor='white')
-                print(f"✅ Matplotlib 차트 저장 성공")
-                return temp_path
-            except Exception as e:
-                print(f"⚠️ Matplotlib 저장 실패: {e}")
-        
-        # 기타 차트 타입들...
-        else:
-            print(f"❌ 지원하지 않는 차트 타입: {type(fig)}")
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-            return None
-            
-        # 파일이 실제로 생성되었는지 확인
-        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-            print(f"✅ 차트 이미지 저장: {temp_path} ({os.path.getsize(temp_path)} bytes)")
-            return temp_path
-        else:
-            print(f"❌ 차트 파일이 비어있거나 생성되지 않음")
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-            return None
-            
-    except Exception as e:
-        print(f"❌ 차트 이미지 저장 실패: {e}")
-        return None
-
-
-def capture_streamlit_charts(chart_objects):
-    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
-    chart_paths = []
-    
-    if not chart_objects:
-        print("⚠️ 차트 객체가 없습니다")
-        return chart_paths
-    
-    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
-    
-    for i, chart in enumerate(chart_objects):
-        if chart is not None:
-            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
-            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
-            if chart_path:
-                chart_paths.append(chart_path)
-                print(f"✅ 차트 {i+1} 성공")
-            else:
-                print(f"❌ 차트 {i+1} 실패")
-        else:
-            print(f"⚠️ 차트 {i+1}이 None입니다")
-    
-    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
-    return chart_paths
 
 
 def clean_ai_text(raw):
@@ -907,10 +929,15 @@ def create_enhanced_pdf_report(
     chart_images=None,  # Streamlit 차트 이미지 경로들
     font_paths=None,
 ):
-    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함)"""
+    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함, kaleido 사용)"""
     
     try:
         print("🔄 PDF 보고서 생성 시작...")
+        
+        # kaleido 체크
+        if not PLOTLY_AVAILABLE:
+            print("❌ Plotly/kaleido가 설치되지 않았습니다.")
+            print("다음 명령어로 설치하세요: pip install plotly kaleido")
         
         # 하위 호환성: selected_charts를 chart_images로 변환
         if selected_charts and not chart_images:
@@ -1069,7 +1096,7 @@ def generate_report_with_gpt_insights(
     **kwargs
 ):
     """
-    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성
+    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성 (kaleido 사용)
     
     사용 예시:
     pdf_bytes = generate_report_with_gpt_insights(
@@ -1082,12 +1109,18 @@ def generate_report_with_gpt_insights(
     try:
         print("🔄 완전한 보고서 생성 시작...")
         
+        if not PLOTLY_AVAILABLE:
+            print("❌ Plotly/kaleido가 설치되지 않았습니다.")
+            print("차트 없이 텍스트 기반 보고서를 생성합니다.")
+        
         # Streamlit 차트들을 이미지로 변환
         chart_images = []
-        if streamlit_charts:
+        if streamlit_charts and PLOTLY_AVAILABLE:
             print(f"🔄 {len(streamlit_charts)}개 차트를 이미지로 변환 중...")
             chart_images = capture_streamlit_charts(streamlit_charts)
             print(f"✅ {len(chart_images)}개 차트 이미지 생성 완료")
+        elif streamlit_charts and not PLOTLY_AVAILABLE:
+            print("⚠️ kaleido가 없어서 차트를 변환할 수 없습니다.")
         
         # PDF 보고서 생성
         pdf_bytes = create_enhanced_pdf_report(
@@ -1105,3 +1138,61 @@ def generate_report_with_gpt_insights(
     except Exception as e:
         print(f"❌ 완전한 보고서 생성 실패: {e}")
         raise e
+
+
+# 설치 체크 및 안내 함수
+def check_dependencies():
+    """필요한 패키지들이 설치되어 있는지 체크"""
+    missing_packages = []
+    
+    try:
+        import plotly
+        print("✅ plotly 설치됨")
+    except ImportError:
+        missing_packages.append("plotly")
+    
+    try:
+        import kaleido
+        print("✅ kaleido 설치됨")
+    except ImportError:
+        missing_packages.append("kaleido")
+    
+    try:
+        import reportlab
+        print("✅ reportlab 설치됨")
+    except ImportError:
+        missing_packages.append("reportlab")
+    
+    try:
+        import pandas
+        print("✅ pandas 설치됨")
+    except ImportError:
+        missing_packages.append("pandas")
+    
+    try:
+        import openpyxl
+        print("✅ openpyxl 설치됨")
+    except ImportError:
+        missing_packages.append("openpyxl")
+    
+    if missing_packages:
+        print(f"❌ 다음 패키지들을 설치해주세요:")
+        for pkg in missing_packages:
+            print(f"   pip install {pkg}")
+        return False
+    else:
+        print("✅ 모든 필수 패키지가 설치되어 있습니다!")
+        return True
+
+
+# 사용 예시
+if __name__ == "__main__":
+    print("📦 SK에너지 보고서 생성 모듈")
+    print("=" * 50)
+    check_dependencies()
+    
+    if PLOTLY_AVAILABLE:
+        print("🎯 차트 기능 사용 가능!")
+    else:
+        print("⚠️ 차트 기능을 사용하려면 다음을 실행하세요:")
+        print("   pip install plotly kaleido")
