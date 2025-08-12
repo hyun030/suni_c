@@ -164,22 +164,46 @@ def fig_to_png_bytes(fig, width=900, height=450):
     """Plotly 차트를 PNG 바이트로 변환"""
     try:
         if not PLOTLY_AVAILABLE:
-            print("⚠️ Plotly 사용 불가능")
+            print("❌ Plotly 라이브러리가 없어서 차트 변환 불가능")
             return None
             
-        print("🔄 차트를 PNG로 변환 중...")
-        return fig.to_image(format="png", width=width, height=height)
-    except Exception as e1:
+        if fig is None:
+            print("❌ 차트 객체가 None입니다")
+            return None
+            
+        print(f"🔄 차트를 PNG로 변환 중... (크기: {width}x{height})")
+        
+        # 첫 번째 시도: 기본 방법
         try:
-            print(f"⚠️ 기본 엔진 실패 ({e1}), kaleido 시도...")
-            return fig.to_image(format="png", width=width, height=height, engine="kaleido")
-        except Exception as e2:
+            img_bytes = fig.to_image(format="png", width=width, height=height)
+            print("✅ 기본 엔진으로 차트 변환 성공")
+            return img_bytes
+        except Exception as e1:
+            print(f"⚠️ 기본 엔진 실패: {e1}")
+            
+            # 두 번째 시도: kaleido 엔진
             try:
-                print(f"⚠️ kaleido 실패 ({e2}), orca 시도...")
-                return fig.to_image(format="png", width=width, height=height, engine="orca")
-            except Exception as e3:
-                print(f"❌ 모든 차트 변환 실패: {e3}")
-                return None
+                img_bytes = fig.to_image(format="png", width=width, height=height, engine="kaleido")
+                print("✅ kaleido 엔진으로 차트 변환 성공")
+                return img_bytes
+            except Exception as e2:
+                print(f"⚠️ kaleido 엔진 실패: {e2}")
+                
+                # 세 번째 시도: orca 엔진
+                try:
+                    img_bytes = fig.to_image(format="png", width=width, height=height, engine="orca")
+                    print("✅ orca 엔진으로 차트 변환 성공")
+                    return img_bytes
+                except Exception as e3:
+                    print(f"❌ 모든 차트 변환 엔진 실패")
+                    print(f"   - 기본: {e1}")
+                    print(f"   - kaleido: {e2}")
+                    print(f"   - orca: {e3}")
+                    return None
+                    
+    except Exception as e:
+        print(f"❌ 차트 변환 중 예상치 못한 오류: {e}")
+        return None
 
 
 def split_dataframe_for_pdf(df, max_rows_per_page=20, max_cols_per_page=8):
@@ -288,24 +312,28 @@ def add_financial_data_section(story, financial_data, quarterly_df, registered_f
         print("🔄 재무분석 섹션 추가 중...")
         story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
         
-        # 1-1. SK에너지 대비 경쟁사 갭차이 분석표
+        # 1-1. 분기별 재무지표 상세 데이터 (순서 변경)
+        if quarterly_df is not None and not quarterly_df.empty:
+            add_chunked_table(story, quarterly_df, "1-1. 분기별 재무지표 상세 데이터", 
+                             registered_fonts, BODY_STYLE, '#E6F3FF')
+            print("✅ 1-1. 분기별 재무지표 데이터 추가 완료")
+        else:
+            story.append(Paragraph("1-1. 분기별 재무지표 상세 데이터: 데이터가 없습니다.", BODY_STYLE))
+            print("⚠️ 1-1. 분기별 재무지표 데이터 없음")
+        
+        story.append(Spacer(1, 12))
+        
+        # 1-2. SK에너지 대비 경쟁사 갭차이 분석표 (순서 변경)
         if financial_data is not None and not financial_data.empty:
             # 원시값 컬럼 제외
             display_cols = [c for c in financial_data.columns if not str(c).endswith('_원시값')]
             df_display = financial_data[display_cols].copy()
-            add_chunked_table(story, df_display, "1-1. SK에너지 대비 경쟁사 갭차이 분석", 
+            add_chunked_table(story, df_display, "1-2. SK에너지 대비 경쟁사 갭차이 분석", 
                              registered_fonts, BODY_STYLE, '#F2F2F2')
+            print("✅ 1-2. SK에너지 대비 경쟁사 갭차이 분석 추가 완료")
         else:
-            story.append(Paragraph("1-1. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
-        
-        story.append(Spacer(1, 12))
-        
-        # 1-2. 분기별 재무지표 상세 데이터
-        if quarterly_df is not None and not quarterly_df.empty:
-            add_chunked_table(story, quarterly_df, "1-2. 분기별 재무지표 상세 데이터", 
-                             registered_fonts, BODY_STYLE, '#E6F3FF')
-        else:
-            story.append(Paragraph("1-2. 분기별 재무지표 상세 데이터: 데이터가 없습니다.", BODY_STYLE))
+            story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
+            print("⚠️ 1-2. SK에너지 대비 경쟁사 갭차이 분석 데이터 없음")
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -332,17 +360,23 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                 '구분' in financial_data.columns):
                 
                 print("🔄 비율 비교 차트 생성 중...")
+                print(f"   - financial_data shape: {financial_data.shape}")
+                print(f"   - financial_data columns: {list(financial_data.columns)}")
+                
                 ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
+                print(f"   - 비율 행 개수: {len(ratio_rows)}")
                 
                 if not ratio_rows.empty:
                     # 주요 지표 순서 정렬
                     key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
                     ratio_rows['__order__'] = ratio_rows['구분'].apply(lambda x: key_order.index(x) if x in key_order else 999)
                     ratio_rows = ratio_rows.sort_values('__order__').drop(columns='__order__')
+                    print(f"   - 정렬된 비율 지표: {list(ratio_rows['구분'])}")
 
                     # 데이터 변환
                     melt = []
                     company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
+                    print(f"   - 회사 컬럼: {company_cols}")
                     
                     for _, r in ratio_rows.iterrows():
                         for comp in company_cols:
@@ -351,29 +385,57 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                                 val_float = float(val)
                                 melt.append({'지표': r['구분'], '회사': comp, '수치': val_float})
                             except:
+                                print(f"   - 숫자 변환 실패: {comp}={val}")
                                 continue
+                    
+                    print(f"   - 변환된 데이터 행 수: {len(melt)}")
                     
                     if melt:
                         bar_df = pd.DataFrame(melt)
+                        print(f"   - 차트 데이터프레임 생성: {bar_df.shape}")
+                        
                         fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', 
                                        title="주요 비율 비교")
+                        print("   - Plotly 차트 객체 생성 완료")
                         
                         img_bytes = fig_to_png_bytes(fig_bar)
                         if img_bytes:
+                            print(f"   - 차트 이미지 변환 성공: {len(img_bytes)} bytes")
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                                 tmp.write(img_bytes)
                                 tmp_path = tmp.name
+                                print(f"   - 임시 파일 생성: {tmp_path}")
+                            
                             story.append(Paragraph("2-1. 주요 비율 비교 (막대그래프)", BODY_STYLE))
                             story.append(RLImage(tmp_path, width=500, height=280))
                             story.append(Spacer(1, 16))
+                            print("   - 차트를 PDF에 추가 완료")
+                            
                             try:
                                 os.unlink(tmp_path)
+                                print("   - 임시 파일 정리 완료")
                             except:
+                                print("   - 임시 파일 정리 실패 (무시)")
                                 pass
+                                
                             charts_added = True
                             print("✅ 비율 비교 차트 생성 완료")
+                        else:
+                            print("❌ 차트 이미지 변환 실패")
+                    else:
+                        print("⚠️ 변환 가능한 데이터가 없음")
+                else:
+                    print("⚠️ 비율 데이터 행이 없음")
+            else:
+                print("⚠️ 재무 데이터가 없거나 '구분' 컬럼이 없음")
+                if financial_data is not None:
+                    print(f"   - 데이터 존재: True, 컬럼: {list(financial_data.columns)}")
+                else:
+                    print("   - 데이터 존재: False")
         except Exception as e:
-            print(f"⚠️ 비율 비교 차트 생성 실패: {e}")
+            print(f"❌ 비율 비교 차트 생성 실패: {e}")
+            import traceback
+            print(f"상세 오류: {traceback.format_exc()}")
 
         # 분기별 추이 그래프들
         try:
