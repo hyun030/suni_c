@@ -467,7 +467,7 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
             story.append(Spacer(1, 8))
             
             for i, chart_path in enumerate(chart_images, 1):
-                if chart_path and isinstance(chart_path, str) and os.path.exists(chart_path):
+                if chart_path and os.path.exists(chart_path):
                     try:
                         story.append(Paragraph(f"차트 {i}", BODY_STYLE))
                         story.append(RLImage(chart_path, width=500, height=300))
@@ -477,12 +477,9 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
                         print(f"⚠️ 차트 {i} 추가 실패: {e}")
                         story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
                 else:
-                    print(f"⚠️ 차트 파일이 없거나 잘못됨: {chart_path}")
+                    print(f"⚠️ 차트 파일이 없음: {chart_path}")
         else:
             print("ℹ️ 추가할 차트 이미지가 없습니다")
-            # 차트가 없어도 메시지 표시
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("1-3. 시각화 차트: 차트 데이터가 없습니다.", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -742,7 +739,7 @@ def create_enhanced_pdf_report(
         
         # 4. 뉴스 하이라이트 및 종합 분석 - 섹션 번호 변경
         story.append(Paragraph("4. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
-        add_news_section_content(story, news_data, insights, registered_fonts, BODY_STYLE)
+        add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
 
         # 푸터 (선택사항)
         if show_footer:
