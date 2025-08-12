@@ -45,8 +45,11 @@ def collect_charts_for_pdf():
     """현재 생성된 차트들을 수집해서 PDF용으로 준비"""
     charts = []
     
+    print("🔄 PDF용 차트 수집 시작...")
+    
     # 재무분석 차트 수집
     if 'financial_data' in st.session_state and st.session_state.financial_data is not None:
+        print("📊 재무분석 데이터 발견, 차트 생성 중...")
         final_df = st.session_state.financial_data
         ratio_df = final_df[final_df['구분'].str.contains('%', na=False)]
         raw_cols = [col for col in final_df.columns if col.endswith('_원시값')]
@@ -55,34 +58,61 @@ def collect_charts_for_pdf():
             chart_df = pd.melt(ratio_df, id_vars=['구분'], value_vars=raw_cols, var_name='회사', value_name='수치')
             chart_df['회사'] = chart_df['회사'].str.replace('_원시값', '')
             
+            print(f"📊 차트 데이터 준비 완료: {len(chart_df)}개 항목")
+            
             # 막대 차트
+            print("🔄 막대 차트 생성 중...")
             bar_chart = create_sk_bar_chart(chart_df)
             if bar_chart:
                 charts.append(bar_chart)
+                print("✅ 막대 차트 추가 완료")
+            else:
+                print("❌ 막대 차트 생성 실패")
             
             # 레이더 차트
+            print("🔄 레이더 차트 생성 중...")
             radar_chart = create_sk_radar_chart(chart_df)
             if radar_chart:
                 charts.append(radar_chart)
+                print("✅ 레이더 차트 추가 완료")
+            else:
+                print("❌ 레이더 차트 생성 실패")
         
         # 갭차이 차트
         if raw_cols and len(raw_cols) > 1:
+            print("🔄 갭차이 분석 차트 생성 중...")
             gap_analysis = create_gap_analysis(final_df, raw_cols)
             if not gap_analysis.empty:
                 gap_chart = create_gap_chart(gap_analysis)
                 if gap_chart:
                     charts.append(gap_chart)
+                    print("✅ 갭차이 차트 추가 완료")
+                else:
+                    print("❌ 갭차이 차트 생성 실패")
     
     # 분기별 차트 수집
     if 'quarterly_data' in st.session_state and st.session_state.quarterly_data is not None:
+        print("📊 분기별 데이터 발견, 차트 생성 중...")
+        
+        # 분기별 매출액 추이
+        print("🔄 분기별 매출액 추이 차트 생성 중...")
         quarterly_trend = create_quarterly_trend_chart(st.session_state.quarterly_data)
         if quarterly_trend:
             charts.append(quarterly_trend)
+            print("✅ 분기별 매출액 추이 차트 추가 완료")
+        else:
+            print("❌ 분기별 매출액 추이 차트 생성 실패")
             
+        # 분기별 갭 추이
+        print("🔄 분기별 갭 추이 차트 생성 중...")
         gap_trend = create_gap_trend_chart(st.session_state.quarterly_data)
         if gap_trend:
             charts.append(gap_trend)
+            print("✅ 분기별 갭 추이 차트 추가 완료")
+        else:
+            print("❌ 분기별 갭 추이 차트 생성 실패")
     
+    print(f"✅ 총 {len(charts)}개 차트 수집 완료")
     return charts
 
 def check_kaleido_status():
@@ -452,53 +482,68 @@ def main():
                 quarterly_df = st.session_state.get("quarterly_data")
                 
                 # 현재 생성된 차트들을 수집
-                collected_charts = collect_charts_for_pdf()
-                st.session_state.generated_charts = collected_charts
+                with st.spinner("📊 차트 수집 중..."):
+                    collected_charts = collect_charts_for_pdf()
+                    st.session_state.generated_charts = collected_charts
                 
-                # 디버그 정보 표시
+                # 상세 디버그 정보 표시
                 if collected_charts:
-                    st.info(f"📊 수집된 차트: {len(collected_charts)}개")
+                    st.success(f"📊 수집된 차트: {len(collected_charts)}개")
+                    for i, chart in enumerate(collected_charts, 1):
+                        chart_type = type(chart).__name__ if chart else "None"
+                        st.info(f"차트 {i}: {chart_type}")
                 else:
-                    st.warning("⚠️ 수집된 차트가 없습니다. 먼저 재무분석을 완료해주세요.")
+                    st.error("❌ 수집된 차트가 없습니다. 먼저 재무분석을 완료해주세요.")
+                    st.info("💡 해결방법: 첫 번째 탭에서 'DART 자동분석 시작' 버튼을 클릭하세요.")
 
                 with st.spinner("📄 보고서 생성 중..."):
-                    if report_format == "PDF":
-                        file_bytes = create_enhanced_pdf_report(
-                            financial_data=financial_data_for_report,
-                            news_data=st.session_state.news_data,
-                            insights=st.session_state.integrated_insight or st.session_state.financial_insight or st.session_state.news_insight,
-                            quarterly_df=quarterly_df,
-                            selected_charts=collected_charts,  # ✅ 수집된 차트 전달
-                            show_footer=show_footer,
-                            report_target=report_target.strip() or "보고 대상 미기재",
-                            report_author=report_author.strip() or "보고자 미기재"
-                        )
-                        filename = "SK_Energy_Analysis_Report.pdf"
-                        mime_type = "application/pdf"
-                    else:
-                        file_bytes = create_excel_report(
-                            financial_data=financial_data_for_report,
-                            news_data=st.session_state.news_data,
-                            insights=st.session_state.integrated_insight or st.session_state.financial_insight or st.session_state.news_insight
-                        )
-                        filename = "SK_Energy_Analysis_Report.xlsx"
-                        mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    try:
+                        if report_format == "PDF":
+                            st.info(f"🔄 {len(collected_charts)}개 차트를 포함한 PDF 생성 중...")
+                            file_bytes = create_enhanced_pdf_report(
+                                financial_data=financial_data_for_report,
+                                news_data=st.session_state.news_data,
+                                insights=st.session_state.integrated_insight or st.session_state.financial_insight or st.session_state.news_insight,
+                                quarterly_df=quarterly_df,
+                                selected_charts=collected_charts,  # ✅ 수집된 차트 전달
+                                show_footer=show_footer,
+                                report_target=report_target.strip() or "보고 대상 미기재",
+                                report_author=report_author.strip() or "보고자 미기재"
+                            )
+                            filename = "SK_Energy_Analysis_Report.pdf"
+                            mime_type = "application/pdf"
+                        else:
+                            file_bytes = create_excel_report(
+                                financial_data=financial_data_for_report,
+                                news_data=st.session_state.news_data,
+                                insights=st.session_state.integrated_insight or st.session_state.financial_insight or st.session_state.news_insight
+                            )
+                            filename = "SK_Energy_Analysis_Report.xlsx"
+                            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-                    if file_bytes:
-                        # 세션에 파일 정보 저장
-                        st.session_state.generated_file = file_bytes
-                        st.session_state.generated_filename = filename
-                        st.session_state.generated_mime = mime_type
+                        if file_bytes:
+                            # 세션에 파일 정보 저장
+                            st.session_state.generated_file = file_bytes
+                            st.session_state.generated_filename = filename
+                            st.session_state.generated_mime = mime_type
 
-                        st.download_button(
-                            label="⬇️ 보고서 다운로드",
-                            data=file_bytes,
-                            file_name=filename,
-                            mime=mime_type
-                        )
-                        st.success("✅ 보고서가 성공적으로 생성되었습니다!")
-                    else:
-                        st.error("❌ 보고서 생성에 실패했습니다.")
+                            st.download_button(
+                                label="⬇️ 보고서 다운로드",
+                                data=file_bytes,
+                                file_name=filename,
+                                mime=mime_type
+                            )
+                            st.success("✅ 보고서가 성공적으로 생성되었습니다!")
+                            
+                            # PDF에 차트가 포함되었는지 확인
+                            if report_format == "PDF" and collected_charts:
+                                st.info(f"📊 PDF에 {len(collected_charts)}개 차트가 포함되었습니다.")
+                        else:
+                            st.error("❌ 보고서 생성에 실패했습니다.")
+                            
+                    except Exception as e:
+                        st.error(f"❌ 보고서 생성 중 오류 발생: {str(e)}")
+                        st.info("💡 로그를 확인하여 상세 오류 내용을 파악하세요.")
                         
         with col2:
             st.write("**📧 이메일 서비스 바로가기**")
