@@ -181,22 +181,10 @@ def ascii_to_table(lines, registered_fonts, header_color='#E31E24', row_colors=N
 def fig_to_png_bytes(fig, width=900, height=450):
     """Plotly 차트를 PNG 바이트로 변환"""
     try:
-        # kaleido 엔진 사용 시도
-        return fig.to_image(format="png", width=width, height=height, engine="kaleido")
-    except Exception as e1:
-        try:
-            # orca 엔진 사용 시도  
-            return fig.to_image(format="png", width=width, height=height, engine="orca")
-        except Exception as e2:
-            try:
-                # 기본 엔진 사용
-                return fig.to_image(format="png", width=width, height=height)
-            except Exception as e3:
-                st.error(f"모든 차트 변환 방법 실패:")
-                st.error(f"- kaleido: {e1}")
-                st.error(f"- orca: {e2}") 
-                st.error(f"- default: {e3}")
-                return None
+        return fig.to_image(format="png", width=width, height=height)
+    except Exception as e:
+        st.warning(f"차트 이미지 변환 실패: {e}")
+        return None
 
 
 def add_financial_data_section(story, financial_data, quarterly_df, registered_fonts, HEADING_STYLE, BODY_STYLE):
@@ -329,10 +317,7 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
     # 주요 비율 비교 막대 그래프
     try:
         if financial_data is not None and (not hasattr(financial_data, 'empty') or not financial_data.empty) and '구분' in financial_data.columns:
-            st.info("🔍 막대그래프 생성 시도 중...")
             ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
-            st.write(f"비율 데이터 행 수: {len(ratio_rows)}")
-            
             if not ratio_rows.empty:
                 # 주요 지표 순서 정렬
                 key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
@@ -342,28 +327,18 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                 # 데이터 변환
                 melt = []
                 company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
-                st.write(f"회사 컬럼들: {company_cols}")
-                
                 for _, r in ratio_rows.iterrows():
                     for comp in company_cols:
                         val = str(r[comp]).replace('%','').strip()
                         try:
-                            val_float = float(val)
-                            melt.append({'지표': r['구분'], '회사': comp, '수치': val_float})
+                            melt.append({'지표': r['구분'], '회사': comp, '수치': float(val)})
                         except:
-                            st.warning(f"변환 실패: {comp}={val}")
-                
-                st.write(f"변환된 데이터 개수: {len(melt)}")
+                            pass
                 
                 if melt:
                     bar_df = pd.DataFrame(melt)
-                    st.write("막대그래프 데이터:")
-                    st.dataframe(bar_df.head())
-                    
                     fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', 
                                    title="주요 비율 비교")
-                    st.success("✅ 막대그래프 생성 완료")
-                    
                     img_bytes = fig_to_png_bytes(fig_bar)
                     if img_bytes:
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -377,37 +352,17 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         except:
                             pass
                         charts_added = True
-                        st.success("✅ 막대그래프 PDF 삽입 완료")
-                    else:
-                        st.error("❌ 차트 이미지 변환 실패")
-                else:
-                    st.warning("⚠️ 변환 가능한 비율 데이터 없음")
-            else:
-                st.warning("⚠️ 비율 데이터가 비어있음")
-        else:
-            st.warning("⚠️ 재무 데이터 없거나 '구분' 컬럼 없음")
     except Exception as e:
-        st.error(f"❌ 막대그래프 생성 오류: {e}")
         story.append(Paragraph(f"막대그래프 생성 오류: {e}", BODY_STYLE))
 
     # 분기별 추이 그래프들
     try:
         if quarterly_df is not None and (not hasattr(quarterly_df, 'empty') or not quarterly_df.empty):
-            st.info("🔍 분기별 추이 그래프 생성 시도 중...")
-            st.write(f"분기별 데이터 형태: {quarterly_df.shape}")
-            st.write(f"분기별 데이터 컬럼들: {list(quarterly_df.columns)}")
-            
             # 영업이익률 추이
             if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
-                st.info("📈 영업이익률 추이 그래프 생성 중...")
                 fig_line = go.Figure()
-                companies = quarterly_df['회사'].dropna().unique()
-                st.write(f"회사들: {companies}")
-                
-                for comp in companies:
-                    cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
-                    st.write(f"{comp} 데이터 개수: {len(cdf)}")
-                    
+                for comp in quarterly_df['회사'].dropna().unique():
+                    cdf = quarterly_df[quarterly_df['회사'] == comp]
                     fig_line.add_trace(go.Scatter(
                         x=cdf['분기'], 
                         y=cdf['영업이익률'], 
@@ -416,14 +371,12 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         line=dict(width=3),
                         marker=dict(size=8)
                     ))
-                    
                 fig_line.update_layout(
                     title="분기별 영업이익률 추이", 
                     xaxis_title="분기", 
                     yaxis_title="영업이익률(%)",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
-                
                 img_bytes = fig_to_png_bytes(fig_line)
                 if img_bytes:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -437,19 +390,12 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                     except:
                         pass
                     charts_added = True
-                    st.success("✅ 영업이익률 추이 그래프 PDF 삽입 완료")
-                else:
-                    st.error("❌ 영업이익률 그래프 이미지 변환 실패")
-            else:
-                st.warning(f"⚠️ 영업이익률 그래프를 위한 필수 컬럼 부족: {['분기', '회사', '영업이익률']}")
 
             # 매출액 추이
             if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
-                st.info("📈 매출액 추이 그래프 생성 중...")
                 fig_rev = go.Figure()
-                
                 for comp in quarterly_df['회사'].dropna().unique():
-                    cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
+                    cdf = quarterly_df[quarterly_df['회사'] == comp]
                     fig_rev.add_trace(go.Scatter(
                         x=cdf['분기'], 
                         y=cdf['매출액'], 
@@ -458,14 +404,12 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         line=dict(width=3),
                         marker=dict(size=8)
                     ))
-                    
                 fig_rev.update_layout(
                     title="분기별 매출액 추이", 
                     xaxis_title="분기", 
                     yaxis_title="매출액(조원)",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
-                
                 img_bytes = fig_to_png_bytes(fig_rev)
                 if img_bytes:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -479,15 +423,7 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                     except:
                         pass
                     charts_added = True
-                    st.success("✅ 매출액 추이 그래프 PDF 삽입 완료")
-                else:
-                    st.error("❌ 매출액 그래프 이미지 변환 실패")
-            else:
-                st.warning(f"⚠️ 매출액 그래프를 위한 필수 컬럼 부족: {['분기', '회사', '매출액']}")
-        else:
-            st.warning("⚠️ 분기별 데이터 없음")
     except Exception as e:
-        st.error(f"❌ 추이 그래프 생성 오류: {e}")
         story.append(Paragraph(f"추이 그래프 생성 오류: {e}", BODY_STYLE))
 
     # 외부에서 전달된 Plotly 차트들 (selected_charts)
