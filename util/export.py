@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-완전한 PDF/Excel 보고서 생성 모듈 (Streamlit Cloud 지원)
+완전한 PDF/Excel 보고서 생성 모듈 (Chrome 자동 설치 포함)
 설치 필요: pip install kaleido plotly reportlab pandas openpyxl
 """
 
@@ -32,7 +32,7 @@ except ImportError:
     GPT_AVAILABLE = False
     print("⚠️ OpenAI 패키지가 없습니다. GPT 기능을 사용하려면 'pip install openai'를 실행하세요.")
 
-# Plotly import
+# Plotly import 및 Chrome/kaleido 자동 설치
 try:
     import plotly.express as px
     import plotly.graph_objects as go
@@ -45,97 +45,8 @@ except ImportError as e:
     print("다음 명령어로 설치하세요: pip install plotly kaleido")
 
 
-def setup_chrome_for_streamlit_cloud():
-    """Streamlit Cloud 환경에서 Chrome 설정"""
-    try:
-        # Streamlit Cloud 환경 체크
-        if 'STREAMLIT_SHARING' in os.environ or 'STREAMLIT_CLOUD' in os.environ or 'streamlit' in sys.argv[0].lower():
-            print("🔄 Streamlit Cloud 환경 감지됨")
-            
-            # Chrome 경로 설정
-            chrome_paths = [
-                '/usr/bin/chromium',
-                '/usr/bin/chromium-browser', 
-                '/usr/bin/google-chrome',
-                '/usr/bin/google-chrome-stable'
-            ]
-            
-            chrome_path = None
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    chrome_path = path
-                    print(f"✅ Chrome 발견: {path}")
-                    break
-            
-            if chrome_path:
-                # Kaleido에 Chrome 경로 설정
-                os.environ['KALEIDO_CHROME_PATH'] = chrome_path
-                
-                # Chrome 옵션 설정 (Streamlit Cloud용)
-                chrome_options = [
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-web-security',
-                    '--disable-features=VizDisplayCompositor',
-                    '--headless'
-                ]
-                os.environ['KALEIDO_CHROME_OPTIONS'] = ','.join(chrome_options)
-                
-                print("✅ Streamlit Cloud용 Chrome 설정 완료")
-                return True
-            else:
-                print("❌ Chrome이 설치되지 않았습니다.")
-                print("💡 packages.txt에 chromium을 추가하고 앱을 재배포하세요.")
-                return False
-        else:
-            print("🔄 로컬 환경에서 실행 중")
-            return True
-            
-    except Exception as e:
-        print(f"⚠️ Chrome 설정 오류: {e}")
-        return False
-
-
 def install_chrome_if_needed():
-    """Streamlit Cloud 환경을 고려한 Chrome 설치/설정"""
-    
-    # 먼저 Streamlit Cloud 환경 설정 시도
-    if setup_chrome_for_streamlit_cloud():
-        # kaleido 테스트
-        try:
-            import kaleido
-            import plotly.graph_objects as go
-            
-            test_fig = go.Figure(data=go.Bar(x=['테스트'], y=[1]))
-            
-            import tempfile
-            temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-            temp_path = temp_file.name
-            temp_file.close()
-            
-            test_fig.write_image(temp_path, engine='kaleido', width=100, height=100)
-            
-            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                os.unlink(temp_path)
-                print("✅ Streamlit Cloud에서 kaleido 정상 작동 확인!")
-                return True
-            else:
-                raise Exception("테스트 이미지 생성 실패")
-                
-        except ImportError:
-            print("❌ kaleido가 설치되지 않았습니다.")
-            print("💡 requirements.txt에 kaleido>=0.2.1을 추가하고 재배포하세요.")
-            return False
-        except Exception as e:
-            print(f"⚠️ Streamlit Cloud에서 kaleido 오류: {e}")
-            print("💡 다음을 확인해주세요:")
-            print("   1. packages.txt에 chromium 추가됨 ✅")
-            print("   2. requirements.txt에 kaleido>=0.2.1 추가됨 ✅") 
-            print("   3. 앱 재배포 필요")
-            return False
-    
-    # 로컬 환경인 경우 기존 로직
+    """Chrome이 없으면 자동으로 설치 시도"""
     if not PLOTLY_AVAILABLE:
         print("❌ Plotly가 없어서 Chrome 설치를 건너뜁니다.")
         return False
@@ -183,8 +94,51 @@ def install_chrome_if_needed():
             
     except Exception as e:
         print(f"⚠️ Chrome/kaleido 오류 감지: {e}")
-        print("👨‍💻 로컬에서는 터미널에서 'plotly_get_chrome'을 실행해주세요.")
-        return False
+        print("🔄 Chrome 자동 설치를 시도합니다...")
+        
+        try:
+            # 1. plotly_get_chrome 실행
+            result = subprocess.run(['plotly_get_chrome'], 
+                                   capture_output=True, text=True, shell=True, timeout=300)
+            
+            if result.returncode == 0:
+                print("✅ plotly_get_chrome 실행 완료!")
+                print("🔄 다시 테스트합니다...")
+                
+                # 다시 테스트
+                test_fig = go.Figure(data=go.Bar(x=['테스트'], y=[1]))
+                temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                temp_path = temp_file.name
+                temp_file.close()
+                
+                test_fig.write_image(temp_path, engine='kaleido', width=100, height=100)
+                
+                if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                    os.unlink(temp_path)
+                    print("✅ Chrome 설치 후 kaleido 정상 작동 확인!")
+                    return True
+                else:
+                    print("❌ Chrome 설치 후에도 여전히 문제가 있습니다.")
+                    return False
+                    
+            else:
+                print(f"❌ plotly_get_chrome 실행 실패: {result.stderr}")
+                
+                # 2. 대안: 수동 안내
+                print("👨‍💻 수동으로 다음을 실행해주세요:")
+                print("   터미널에서: plotly_get_chrome")
+                print("   또는 Google Chrome을 직접 설치하세요.")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            print("⏰ Chrome 설치 시간 초과 (5분)")
+            print("👨‍💻 수동으로 실행해주세요: plotly_get_chrome")
+            return False
+        except Exception as install_error:
+            print(f"❌ Chrome 설치 중 오류: {install_error}")
+            print("👨‍💻 수동으로 다음을 실행해주세요:")
+            print("   터미널에서: plotly_get_chrome")
+            return False
 
 
 # Chrome 자동 설치 시도
@@ -496,7 +450,7 @@ def create_gap_chart(gap_analysis_df: pd.DataFrame):
 
 
 def save_chart_as_image(fig, filename_prefix="chart"):
-    """Streamlit Cloud 지원 차트 이미지 저장"""
+    """Chrome 자동 설치 후 차트를 이미지로 저장"""
     try:
         if not PLOTLY_AVAILABLE:
             print("❌ Plotly가 설치되지 않아 차트를 저장할 수 없습니다.")
@@ -592,7 +546,8 @@ def capture_streamlit_charts(chart_objects):
     if success_count == 0 and len(chart_objects) > 0:
         if not CHROME_AVAILABLE:
             print("🚨 Chrome이 설치되지 않아서 차트를 이미지로 변환할 수 없습니다.")
-            print("💡 Streamlit Cloud에서는 packages.txt에 chromium을 추가하고 재배포하세요.")
+            print("💡 더 좋은 품질의 보고서를 원하시면:")
+            print("   터미널에서: plotly_get_chrome")
         else:
             print("🚨 알 수 없는 이유로 차트 변환에 실패했습니다.")
     elif success_count > 0:
@@ -947,7 +902,7 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         else:
             story.append(Paragraph("1-3. 시각화 차트: 차트 데이터가 없습니다.", BODY_STYLE))
             if not CHROME_AVAILABLE:
-                story.append(Paragraph("💡 Streamlit Cloud에서는 packages.txt에 chromium을 추가하고 재배포하면 차트가 포함됩니다.", BODY_STYLE))
+                story.append(Paragraph("💡 Chrome을 설치하면 차트가 포함된 보고서를 생성할 수 있습니다.", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -1103,7 +1058,7 @@ def create_enhanced_pdf_report(
     chart_images=None,  # Streamlit 차트 이미지 경로들
     font_paths=None,
 ):
-    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함, Streamlit Cloud 지원)"""
+    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함, Chrome 자동 설치)"""
     
     try:
         print("🔄 PDF 보고서 생성 시작...")
@@ -1279,7 +1234,7 @@ def generate_report_with_gpt_insights(
     **kwargs
 ):
     """
-    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성 (Streamlit Cloud 지원)
+    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성 (Chrome 자동 설치)
     
     사용 예시:
     pdf_bytes = generate_report_with_gpt_insights(
@@ -1297,7 +1252,7 @@ def generate_report_with_gpt_insights(
             print("차트 없이 텍스트 기반 보고서를 생성합니다.")
         elif not CHROME_AVAILABLE:
             print("⚠️ Chrome이 없어서 차트 품질이 제한적입니다.")
-            print("💡 Streamlit Cloud에서는 packages.txt에 chromium을 추가하고 재배포하세요.")
+            print("💡 더 좋은 품질을 원하시면 터미널에서 'plotly_get_chrome'을 실행하세요.")
         
         # Streamlit 차트들을 이미지로 변환
         chart_images = []
@@ -1374,54 +1329,37 @@ def check_dependencies():
             print("🎉 Chrome도 설치되어 있어서 최고 품질의 차트를 생성할 수 있습니다!")
         elif PLOTLY_AVAILABLE:
             print("⚠️ Chrome이 없어서 차트 품질이 제한적입니다.")
-            if 'STREAMLIT_SHARING' in os.environ or 'STREAMLIT_CLOUD' in os.environ:
-                print("💡 Streamlit Cloud: packages.txt에 chromium 추가 후 재배포")
-            else:
-                print("💡 로컬: plotly_get_chrome 실행")
+            print("💡 더 좋은 품질을 원하시면: plotly_get_chrome")
         
         return True
 
 
-def get_environment_installation_guide():
-    """환경별 설치 안내"""
-    if 'STREAMLIT_SHARING' in os.environ or 'STREAMLIT_CLOUD' in os.environ or 'streamlit' in sys.argv[0].lower():
-        return """
-🌐 Streamlit Cloud 환경 설정:
+def get_chrome_installation_guide():
+    """Chrome 설치 안내 함수"""
+    guide = """
+🔧 Chrome 설치 방법:
 
-1. packages.txt에 추가:
-   chromium
-   chromium-driver
-   wget
-   curl
-   unzip
+방법 1: 자동 설치 (권장)
+    터미널에서: plotly_get_chrome
 
-2. requirements.txt에 추가:
-   plotly>=5.0.0
-   kaleido>=0.2.1
+방법 2: 수동 설치
+    - Windows: Chrome 홈페이지에서 다운로드
+    - Mac: brew install --cask google-chrome
+    - Linux: sudo apt-get install google-chrome-stable
 
-3. GitHub에 푸시하고 앱 재배포
+설치 후 Python을 다시 시작하면 자동으로 인식됩니다.
 
-4. 재배포 후 자동으로 최고 품질 차트 생성!
+💡 Chrome이 있으면:
+    ✅ 고해상도 차트 생성
+    ✅ 정확한 색상과 폰트
+    ✅ 전문적인 PDF 보고서 품질
 """
-    else:
-        return """
-💻 로컬 환경 설정:
-
-1. Chrome 설치:
-   터미널에서: plotly_get_chrome
-
-2. 또는 수동 설치:
-   - Windows: Chrome 다운로드
-   - Mac: brew install --cask google-chrome
-   - Linux: sudo apt-get install google-chrome-stable
-
-3. Python 재시작 후 사용
-"""
+    return guide
 
 
 # 사용 예시
 if __name__ == "__main__":
-    print("📦 SK에너지 보고서 생성 모듈 (Streamlit Cloud 지원)")
+    print("📦 SK에너지 보고서 생성 모듈 (Chrome 자동 설치 포함)")
     print("=" * 60)
     
     # 의존성 체크
@@ -1432,14 +1370,14 @@ if __name__ == "__main__":
             print("🎯 모든 기능 사용 가능! (최고 품질 차트 포함)")
         else:
             print("🎯 기본 기능 사용 가능! (제한적 차트)")
-            print("\n" + get_environment_installation_guide())
+            print("\n" + get_chrome_installation_guide())
     else:
         print("⚠️ 차트 기능을 사용하려면 다음을 실행하세요:")
         print("   pip install plotly kaleido")
     
     print("\n🚀 사용 예시:")
     print("""
-# 기본 사용법 (Streamlit Cloud 지원)
+# 기본 사용법
 pdf_bytes = generate_report_with_gpt_insights(
     financial_data=df,
     insights=ai_insights,
@@ -1450,14 +1388,4 @@ pdf_bytes = generate_report_with_gpt_insights(
 # 파일로 저장
 with open("sk_energy_report.pdf", "wb") as f:
     f.write(pdf_bytes)
-
-# Excel 보고서 생성
-excel_bytes = create_excel_report(
-    financial_data=df,
-    news_data=news_df,
-    insights=ai_insights
-)
-
-with open("sk_energy_report.xlsx", "wb") as f:
-    f.write(excel_bytes)
 """)
