@@ -30,13 +30,58 @@ def initialize_session_state():
     session_vars = [
         'financial_data', 'quarterly_data', 'news_data', 
         'financial_insight', 'news_insight', 'selected_companies', 
-        'manual_financial_data', 'integrated_insight'
+        'manual_financial_data', 'integrated_insight', 
+        'generated_charts'  # ✅ 차트 저장용 변수 추가
     ]
     for var in session_vars:
         if var not in st.session_state:
             st.session_state[var] = None
     if 'custom_keywords' not in st.session_state:
         st.session_state.custom_keywords = config.BENCHMARKING_KEYWORDS
+
+def collect_charts_for_pdf():
+    """현재 생성된 차트들을 수집해서 PDF용으로 준비"""
+    charts = []
+    
+    # 재무분석 차트 수집
+    if 'financial_data' in st.session_state and st.session_state.financial_data is not None:
+        final_df = st.session_state.financial_data
+        ratio_df = final_df[final_df['구분'].str.contains('%', na=False)]
+        raw_cols = [col for col in final_df.columns if col.endswith('_원시값')]
+        
+        if not ratio_df.empty and raw_cols:
+            chart_df = pd.melt(ratio_df, id_vars=['구분'], value_vars=raw_cols, var_name='회사', value_name='수치')
+            chart_df['회사'] = chart_df['회사'].str.replace('_원시값', '')
+            
+            # 막대 차트
+            bar_chart = create_sk_bar_chart(chart_df)
+            if bar_chart:
+                charts.append(bar_chart)
+            
+            # 레이더 차트
+            radar_chart = create_sk_radar_chart(chart_df)
+            if radar_chart:
+                charts.append(radar_chart)
+        
+        # 갭차이 차트
+        if raw_cols and len(raw_cols) > 1:
+            gap_analysis = create_gap_analysis(final_df, raw_cols)
+            if not gap_analysis.empty:
+                gap_chart = create_gap_chart(gap_analysis)
+                if gap_chart:
+                    charts.append(gap_chart)
+    
+    # 분기별 차트 수집
+    if 'quarterly_data' in st.session_state and st.session_state.quarterly_data is not None:
+        quarterly_trend = create_quarterly_trend_chart(st.session_state.quarterly_data)
+        if quarterly_trend:
+            charts.append(quarterly_trend)
+            
+        gap_trend = create_gap_trend_chart(st.session_state.quarterly_data)
+        if gap_trend:
+            charts.append(gap_trend)
+    
+    return charts
 
 def check_kaleido_status():
     """kaleido 의존성 체크 (디버그용)"""
@@ -361,9 +406,18 @@ def main():
                 elif st.session_state.manual_financial_data is not None and not st.session_state.manual_financial_data.empty:
                     financial_data_for_report = st.session_state.manual_financial_data
 
-                # 선택 입력(있으면 전달)
+                # ✅ 차트 수집 (핵심 수정 부분!)
                 quarterly_df = st.session_state.get("quarterly_data")
-                selected_charts = st.session_state.get("selected_charts")
+                
+                # 현재 생성된 차트들을 수집
+                collected_charts = collect_charts_for_pdf()
+                st.session_state.generated_charts = collected_charts
+                
+                # 디버그 정보 표시
+                if collected_charts:
+                    st.info(f"📊 수집된 차트: {len(collected_charts)}개")
+                else:
+                    st.warning("⚠️ 수집된 차트가 없습니다. 먼저 재무분석을 완료해주세요.")
 
                 with st.spinner("📄 보고서 생성 중..."):
                     if report_format == "PDF":
@@ -371,11 +425,11 @@ def main():
                             financial_data=financial_data_for_report,
                             news_data=st.session_state.news_data,
                             insights=st.session_state.integrated_insight or st.session_state.financial_insight or st.session_state.news_insight,
-                            quarterly_df=quarterly_df,                 # 분기 데이터(있으면)
-                            selected_charts=selected_charts,           # 외부 전달 차트(있으면)
-                            show_footer=show_footer,                   # ✅ 푸터 표시 여부 반영
-                            report_target=report_target.strip() or "보고 대상 미기재",  # ✅ 사용자 입력 반영
-                            report_author=report_author.strip() or "보고자 미기재"      # ✅ 사용자 입력 반영
+                            quarterly_df=quarterly_df,
+                            selected_charts=collected_charts,  # ✅ 수집된 차트 전달
+                            show_footer=show_footer,
+                            report_target=report_target.strip() or "보고 대상 미기재",
+                            report_author=report_author.strip() or "보고자 미기재"
                         )
                         filename = "SK_Energy_Analysis_Report.pdf"
                         mime_type = "application/pdf"
