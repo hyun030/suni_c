@@ -460,26 +460,46 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         else:
             story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
         
-        # 1-3. 차트 이미지들 추가
+        # 1-3. 차트 이미지들 추가 (무조건 섹션 생성)
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
+        story.append(Spacer(1, 8))
+        
         if chart_images and len(chart_images) > 0:
-            story.append(Spacer(1, 12))
-            story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
-            story.append(Spacer(1, 8))
+            print(f"🔄 {len(chart_images)}개 차트 이미지 PDF에 추가 중...")
             
             for i, chart_path in enumerate(chart_images, 1):
-                if chart_path and os.path.exists(chart_path):
-                    try:
-                        story.append(Paragraph(f"차트 {i}", BODY_STYLE))
-                        story.append(RLImage(chart_path, width=500, height=300))
-                        story.append(Spacer(1, 16))
-                        print(f"✅ 차트 {i} 추가 완료")
-                    except Exception as e:
-                        print(f"⚠️ 차트 {i} 추가 실패: {e}")
-                        story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
+                print(f"🔄 차트 {i} 처리: {chart_path}")
+                
+                if chart_path:
+                    if isinstance(chart_path, str):
+                        if os.path.exists(chart_path):
+                            try:
+                                file_size = os.path.getsize(chart_path)
+                                print(f"  파일 크기: {file_size} bytes")
+                                
+                                story.append(Paragraph(f"차트 {i}", BODY_STYLE))
+                                story.append(RLImage(chart_path, width=500, height=300))
+                                story.append(Spacer(1, 16))
+                                print(f"✅ 차트 {i} PDF 추가 성공")
+                            except Exception as e:
+                                print(f"❌ 차트 {i} PDF 추가 실패: {e}")
+                                story.append(Paragraph(f"차트 {i}: 이미지 로드 실패 - {str(e)}", BODY_STYLE))
+                        else:
+                            print(f"❌ 차트 파일이 존재하지 않음: {chart_path}")
+                            story.append(Paragraph(f"차트 {i}: 파일이 존재하지 않음", BODY_STYLE))
+                    else:
+                        print(f"❌ 차트 경로가 문자열이 아님: {type(chart_path)}")
+                        story.append(Paragraph(f"차트 {i}: 잘못된 경로 타입", BODY_STYLE))
                 else:
-                    print(f"⚠️ 차트 파일이 없음: {chart_path}")
+                    print(f"❌ 차트 경로가 None 또는 빈 값")
+                    story.append(Paragraph(f"차트 {i}: 경로가 비어있음", BODY_STYLE))
         else:
-            print("ℹ️ 추가할 차트 이미지가 없습니다")
+            print("❌ chart_images가 비어있거나 None입니다")
+            print(f"chart_images 값: {chart_images}")
+            print(f"chart_images 타입: {type(chart_images)}")
+            story.append(Paragraph("⚠️ 차트 데이터 처리 중 문제가 발생했습니다.", BODY_STYLE))
+            story.append(Paragraph("디버깅 정보를 확인해주세요.", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -642,6 +662,10 @@ def create_enhanced_pdf_report(
         print("🔄 PDF 보고서 생성 시작...")
         
         # 하위 호환성: selected_charts가 있으면 chart_images로 변환
+        print("🔍 차트 변환 프로세스 시작...")
+        print(f"selected_charts: {selected_charts}")
+        print(f"chart_images: {chart_images}")
+        
         if selected_charts and not chart_images:
             print("🔄 selected_charts를 chart_images로 변환 중...")
             print(f"selected_charts 타입: {type(selected_charts)}")
@@ -651,6 +675,7 @@ def create_enhanced_pdf_report(
                 # 첫 번째 항목을 확인해서 차트 객체인지 이미지 경로인지 판단
                 first_item = selected_charts[0]
                 print(f"첫 번째 항목 타입: {type(first_item)}")
+                print(f"첫 번째 항목 값: {first_item}")
                 
                 if isinstance(first_item, str):
                     # 이미 이미지 경로들인 경우
@@ -660,15 +685,19 @@ def create_enhanced_pdf_report(
                     # Plotly 차트 객체들인 경우 이미지로 변환
                     print("🔄 차트 객체들을 이미지로 변환 시작...")
                     chart_images = capture_streamlit_charts(selected_charts)
-                    print(f"✅ {len(chart_images)}개 차트 이미지 생성 완료")
+                    print(f"✅ {len(chart_images)}개 차트 이미지 변환 완료")
             else:
                 chart_images = []
-                print("⚠️ selected_charts가 빈 리스트이거나 올바르지 않은 형식")
+                print("❌ selected_charts가 빈 리스트이거나 올바르지 않은 형식")
         
-        # chart_images가 없으면 빈 리스트로 설정
+        # chart_images 최종 확인
         if not chart_images:
             chart_images = []
-            print("ℹ️ 차트 이미지가 없습니다")
+            print("⚠️ 최종적으로 chart_images가 비어있습니다")
+        else:
+            print(f"✅ 최종 chart_images: {len(chart_images)}개")
+            for i, img in enumerate(chart_images):
+                print(f"  이미지 {i+1}: {img}")
         
         # 폰트 등록
         registered_fonts = register_fonts_safe()
@@ -739,7 +768,7 @@ def create_enhanced_pdf_report(
         
         # 4. 뉴스 하이라이트 및 종합 분석 - 섹션 번호 변경
         story.append(Paragraph("4. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
-        add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
+        add_news_section_content(story, news_data, insights, registered_fonts, BODY_STYLE)
 
         # 푸터 (선택사항)
         if show_footer:
@@ -805,24 +834,35 @@ def capture_streamlit_charts(chart_objects):
     chart_paths = []
     
     if not chart_objects:
-        print("⚠️ 차트 객체가 없습니다")
+        print("❌ chart_objects가 None이거나 비어있습니다")
         return chart_paths
     
-    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
+    print(f"🔄 {len(chart_objects)}개 차트 객체 이미지 변환 시작...")
+    print(f"chart_objects 타입: {type(chart_objects)}")
     
     for i, chart in enumerate(chart_objects):
+        print(f"\n--- 차트 {i+1} 변환 시작 ---")
         if chart is not None:
-            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            print(f"차트 타입: {type(chart)}")
+            print(f"차트 속성들: {[attr for attr in dir(chart) if not attr.startswith('_')][:10]}")
+            
             chart_path = save_chart_as_image(chart, f"chart_{i+1}")
             if chart_path:
                 chart_paths.append(chart_path)
-                print(f"✅ 차트 {i+1} 성공")
+                print(f"✅ 차트 {i+1} 이미지 변환 성공: {chart_path}")
             else:
-                print(f"❌ 차트 {i+1} 실패")
+                print(f"❌ 차트 {i+1} 이미지 변환 실패")
         else:
-            print(f"⚠️ 차트 {i+1}이 None입니다")
+            print(f"❌ 차트 {i+1}이 None입니다")
     
-    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
+    print(f"\n🎯 최종 결과: {len(chart_paths)}개 차트 이미지 생성 완료")
+    for i, path in enumerate(chart_paths, 1):
+        if os.path.exists(path):
+            size = os.path.getsize(path)
+            print(f"  차트 {i}: {path} ({size} bytes)")
+        else:
+            print(f"  차트 {i}: {path} (파일 없음)")
+    
     return chart_paths
 
 
