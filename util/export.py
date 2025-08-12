@@ -426,16 +426,35 @@ def capture_streamlit_charts(chart_objects):
     for i, chart in enumerate(chart_objects):
         if chart is not None:
             print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            
+            # 디버그: 차트 속성 확인
+            if hasattr(chart, 'data') and hasattr(chart, 'layout'):
+                print(f"   - 차트 데이터: {len(chart.data)}개 trace")
+                print(f"   - 차트 제목: {getattr(chart.layout, 'title', {}).get('text', 'No title')}")
+            
             chart_path = save_chart_as_image(chart, f"chart_{i+1}")
             if chart_path:
                 chart_paths.append(chart_path)
-                print(f"✅ 차트 {i+1} 성공")
+                print(f"✅ 차트 {i+1} 성공: {chart_path}")
+                
+                # 파일 크기 확인
+                if os.path.exists(chart_path):
+                    size = os.path.getsize(chart_path)
+                    print(f"   - 파일 크기: {size} bytes")
             else:
                 print(f"❌ 차트 {i+1} 실패")
         else:
             print(f"⚠️ 차트 {i+1}이 None입니다")
     
     print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
+    
+    # 최종 결과 확인
+    for i, path in enumerate(chart_paths, 1):
+        if os.path.exists(path):
+            print(f"📁 차트 {i} 파일 확인: {path} ({os.path.getsize(path)} bytes)")
+        else:
+            print(f"❌ 차트 {i} 파일 없음: {path}")
+    
     return chart_paths
 
 
@@ -756,29 +775,50 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         else:
             story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
         
-        # 1-3. 차트 이미지들 추가
+        # 1-3. 차트 이미지들 추가 (상세 디버깅)
+        print(f"🔍 chart_images 확인: {chart_images}")
+        print(f"🔍 chart_images 타입: {type(chart_images)}")
+        print(f"🔍 chart_images 길이: {len(chart_images) if chart_images else 0}")
+        
         if chart_images and len(chart_images) > 0:
             story.append(Spacer(1, 12))
             story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
             story.append(Spacer(1, 8))
             
             for i, chart_path in enumerate(chart_images, 1):
+                print(f"🔍 차트 {i} 경로: {chart_path}")
+                print(f"🔍 차트 {i} 타입: {type(chart_path)}")
+                
                 if chart_path and os.path.exists(chart_path):
                     try:
-                        story.append(Paragraph(f"차트 {i}", BODY_STYLE))
-                        story.append(RLImage(chart_path, width=500, height=300))
-                        story.append(Spacer(1, 16))
-                        print(f"✅ 차트 {i} 추가 완료")
+                        file_size = os.path.getsize(chart_path)
+                        print(f"🔍 차트 {i} 파일 크기: {file_size} bytes")
+                        
+                        if file_size > 0:
+                            story.append(Paragraph(f"차트 {i}", BODY_STYLE))
+                            story.append(RLImage(chart_path, width=500, height=300))
+                            story.append(Spacer(1, 16))
+                            print(f"✅ 차트 {i} PDF에 추가 완료")
+                        else:
+                            print(f"❌ 차트 {i} 파일이 비어있음")
+                            story.append(Paragraph(f"차트 {i}: 파일이 비어있습니다", BODY_STYLE))
                     except Exception as e:
                         print(f"⚠️ 차트 {i} 추가 실패: {e}")
-                        story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
+                        story.append(Paragraph(f"차트 {i}: 이미지 로드 실패 - {str(e)}", BODY_STYLE))
                 else:
                     print(f"⚠️ 차트 파일이 없음: {chart_path}")
+                    story.append(Paragraph(f"차트 {i}: 파일을 찾을 수 없습니다", BODY_STYLE))
+        else:
+            print("⚠️ chart_images가 비어있거나 None입니다")
+            story.append(Spacer(1, 12))
+            story.append(Paragraph("1-3. 시각화 차트: 차트 이미지가 생성되지 않았습니다.", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
     except Exception as e:
         print(f"❌ 재무분석 섹션 추가 오류: {e}")
+        import traceback
+        print(f"상세 오류: {traceback.format_exc()}")
 
 
 def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, header_color='#E31E24'):
