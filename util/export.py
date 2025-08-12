@@ -306,252 +306,211 @@ def add_chunked_table(story, df, title, registered_fonts, BODY_STYLE, header_col
         story.append(Paragraph(f"{title}: 테이블 생성 중 오류가 발생했습니다.", BODY_STYLE))
 
 
-def add_financial_data_section(story, financial_data, quarterly_df, registered_fonts, HEADING_STYLE, BODY_STYLE):
-    """재무분석 결과 섹션 추가"""
+def add_quarterly_charts(story, quarterly_df, BODY_STYLE):
+    """분기별 데이터 관련 차트들 추가"""
     try:
-        print("🔄 재무분석 섹션 추가 중...")
+        if not PLOTLY_AVAILABLE:
+            return
+            
+        # 영업이익률 추이
+        if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
+            print("🔄 영업이익률 추이 차트 생성 중...")
+            fig_line = go.Figure()
+            companies = quarterly_df['회사'].dropna().unique()
+            
+            for comp in companies:
+                cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
+                fig_line.add_trace(go.Scatter(
+                    x=cdf['분기'], 
+                    y=cdf['영업이익률'], 
+                    mode='lines+markers', 
+                    name=comp,
+                    line=dict(width=3),
+                    marker=dict(size=8)
+                ))
+                
+            fig_line.update_layout(
+                title="분기별 영업이익률 추이", 
+                xaxis_title="분기", 
+                yaxis_title="영업이익률(%)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            
+            img_bytes = fig_to_png_bytes(fig_line)
+            if img_bytes:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    tmp.write(img_bytes)
+                    tmp_path = tmp.name
+                story.append(RLImage(tmp_path, width=500, height=280))
+                story.append(Spacer(1, 16))
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+                print("✅ 영업이익률 추이 차트 생성 완료")
+
+        # 매출액 추이
+        if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
+            print("🔄 매출액 추이 차트 생성 중...")
+            fig_rev = go.Figure()
+            
+            for comp in quarterly_df['회사'].dropna().unique():
+                cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
+                fig_rev.add_trace(go.Scatter(
+                    x=cdf['분기'], 
+                    y=cdf['매출액'], 
+                    mode='lines+markers', 
+                    name=comp,
+                    line=dict(width=3),
+                    marker=dict(size=8)
+                ))
+                
+            fig_rev.update_layout(
+                title="분기별 매출액 추이", 
+                xaxis_title="분기", 
+                yaxis_title="매출액(조원)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            
+            img_bytes = fig_to_png_bytes(fig_rev)
+            if img_bytes:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    tmp.write(img_bytes)
+                    tmp_path = tmp.name
+                story.append(RLImage(tmp_path, width=500, height=280))
+                story.append(Spacer(1, 16))
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+                print("✅ 매출액 추이 차트 생성 완료")
+    except Exception as e:
+        print(f"⚠️ 분기별 차트 생성 실패: {e}")
+
+
+def add_comparison_charts(story, financial_data, BODY_STYLE):
+    """비교 분석 관련 차트들 추가"""
+    try:
+        if not PLOTLY_AVAILABLE:
+            return
+            
+        if (financial_data is not None and not financial_data.empty and 
+            '구분' in financial_data.columns):
+            
+            print("🔄 비율 비교 차트 생성 중...")
+            
+            ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
+            
+            if not ratio_rows.empty:
+                # 주요 지표 순서 정렬
+                key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
+                ratio_rows['__order__'] = ratio_rows['구분'].apply(lambda x: key_order.index(x) if x in key_order else 999)
+                ratio_rows = ratio_rows.sort_values('__order__').drop(columns='__order__')
+
+                # 데이터 변환
+                melt = []
+                company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
+                
+                for _, r in ratio_rows.iterrows():
+                    for comp in company_cols:
+                        val = str(r[comp]).replace('%','').strip()
+                        try:
+                            val_float = float(val)
+                            melt.append({'지표': r['구분'], '회사': comp, '수치': val_float})
+                        except:
+                            continue
+                
+                if melt:
+                    bar_df = pd.DataFrame(melt)
+                    fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', 
+                                   title="주요 비율 비교")
+                    
+                    img_bytes = fig_to_png_bytes(fig_bar)
+                    if img_bytes:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                            tmp.write(img_bytes)
+                            tmp_path = tmp.name
+                        
+                        story.append(RLImage(tmp_path, width=500, height=280))
+                        story.append(Spacer(1, 16))
+                        
+                        try:
+                            os.unlink(tmp_path)
+                        except:
+                            pass
+                        print("✅ 비율 비교 차트 생성 완료")
+    except Exception as e:
+        print(f"❌ 비교 차트 생성 실패: {e}")
+
+
+def add_additional_charts(story, selected_charts, BODY_STYLE):
+    """추가 차트들 처리"""
+    try:
+        if not selected_charts:
+            return
+            
+        for idx, fig in enumerate(selected_charts, start=1):
+            img_bytes = fig_to_png_bytes(fig)
+            if img_bytes:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    tmp.write(img_bytes)
+                    tmp_path = tmp.name
+                story.append(RLImage(tmp_path, width=500, height=280))
+                story.append(Spacer(1, 16))
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+    except Exception as e:
+        print(f"⚠️ 추가 차트 처리 실패: {e}")
+
+
+def add_financial_data_section(story, financial_data, quarterly_df, selected_charts, registered_fonts, HEADING_STYLE, BODY_STYLE):
+    """재무분석 결과 섹션 추가 (표와 차트 통합)"""
+    try:
+        print("🔄 재무분석 섹션(표+차트 통합) 추가 중...")
         story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
         
-        # 1-1. 분기별 재무지표 상세 데이터 (순서 변경)
+        # 1-1. 분기별 재무지표 상세 데이터 + 관련 차트
         if quarterly_df is not None and not quarterly_df.empty:
             add_chunked_table(story, quarterly_df, "1-1. 분기별 재무지표 상세 데이터", 
                              registered_fonts, BODY_STYLE, '#E6F3FF')
-            print("✅ 1-1. 분기별 재무지표 데이터 추가 완료")
+            
+            # 분기별 데이터 관련 차트들 바로 추가
+            add_quarterly_charts(story, quarterly_df, BODY_STYLE)
+            print("✅ 1-1. 분기별 재무지표 데이터 + 차트 추가 완료")
         else:
             story.append(Paragraph("1-1. 분기별 재무지표 상세 데이터: 데이터가 없습니다.", BODY_STYLE))
             print("⚠️ 1-1. 분기별 재무지표 데이터 없음")
         
         story.append(Spacer(1, 12))
         
-        # 1-2. SK에너지 대비 경쟁사 갭차이 분석표 (순서 변경)
+        # 1-2. SK에너지 대비 경쟁사 갭차이 분석표 + 관련 차트
         if financial_data is not None and not financial_data.empty:
             # 원시값 컬럼 제외
             display_cols = [c for c in financial_data.columns if not str(c).endswith('_원시값')]
             df_display = financial_data[display_cols].copy()
             add_chunked_table(story, df_display, "1-2. SK에너지 대비 경쟁사 갭차이 분석", 
                              registered_fonts, BODY_STYLE, '#F2F2F2')
-            print("✅ 1-2. SK에너지 대비 경쟁사 갭차이 분석 추가 완료")
+            
+            # 비교 분석 관련 차트 바로 추가
+            add_comparison_charts(story, financial_data, BODY_STYLE)
+            print("✅ 1-2. SK에너지 대비 경쟁사 갭차이 분석 + 차트 추가 완료")
         else:
             story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
             print("⚠️ 1-2. SK에너지 대비 경쟁사 갭차이 분석 데이터 없음")
         
+        # 추가 차트들 (선택사항)
+        if selected_charts:
+            story.append(Spacer(1, 12))
+            story.append(Paragraph("1-3. 추가 분석 차트", BODY_STYLE))
+            add_additional_charts(story, selected_charts, BODY_STYLE)
+            print("✅ 1-3. 추가 차트 처리 완료")
+        
         story.append(Spacer(1, 18))
-        print("✅ 재무분석 섹션 추가 완료")
+        print("✅ 재무분석 섹션(통합) 추가 완료")
     except Exception as e:
         print(f"❌ 재무분석 섹션 추가 오류: {e}")
-
-
-def add_charts_section(story, financial_data, quarterly_df, selected_charts, registered_fonts, HEADING_STYLE, BODY_STYLE):
-    """시각화 차트 섹션 추가"""
-    try:
-        print("🔄 차트 섹션 추가 중...")
-        story.append(Paragraph("2. 시각화 차트 및 분석", HEADING_STYLE))
-        
-        charts_added = False
-        
-        if not PLOTLY_AVAILABLE:
-            story.append(Paragraph("차트 생성 라이브러리를 사용할 수 없습니다.", BODY_STYLE))
-            print("⚠️ Plotly 사용 불가능으로 차트 생성 스킵")
-            return charts_added
-        
-        # 주요 비율 비교 막대 그래프
-        try:
-            if (financial_data is not None and not financial_data.empty and 
-                '구분' in financial_data.columns):
-                
-                print("🔄 비율 비교 차트 생성 중...")
-                print(f"   - financial_data shape: {financial_data.shape}")
-                print(f"   - financial_data columns: {list(financial_data.columns)}")
-                
-                ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
-                print(f"   - 비율 행 개수: {len(ratio_rows)}")
-                
-                if not ratio_rows.empty:
-                    # 주요 지표 순서 정렬
-                    key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
-                    ratio_rows['__order__'] = ratio_rows['구분'].apply(lambda x: key_order.index(x) if x in key_order else 999)
-                    ratio_rows = ratio_rows.sort_values('__order__').drop(columns='__order__')
-                    print(f"   - 정렬된 비율 지표: {list(ratio_rows['구분'])}")
-
-                    # 데이터 변환
-                    melt = []
-                    company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
-                    print(f"   - 회사 컬럼: {company_cols}")
-                    
-                    for _, r in ratio_rows.iterrows():
-                        for comp in company_cols:
-                            val = str(r[comp]).replace('%','').strip()
-                            try:
-                                val_float = float(val)
-                                melt.append({'지표': r['구분'], '회사': comp, '수치': val_float})
-                            except:
-                                print(f"   - 숫자 변환 실패: {comp}={val}")
-                                continue
-                    
-                    print(f"   - 변환된 데이터 행 수: {len(melt)}")
-                    
-                    if melt:
-                        bar_df = pd.DataFrame(melt)
-                        print(f"   - 차트 데이터프레임 생성: {bar_df.shape}")
-                        
-                        fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', 
-                                       title="주요 비율 비교")
-                        print("   - Plotly 차트 객체 생성 완료")
-                        
-                        img_bytes = fig_to_png_bytes(fig_bar)
-                        if img_bytes:
-                            print(f"   - 차트 이미지 변환 성공: {len(img_bytes)} bytes")
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                                tmp.write(img_bytes)
-                                tmp_path = tmp.name
-                                print(f"   - 임시 파일 생성: {tmp_path}")
-                            
-                            story.append(Paragraph("2-1. 주요 비율 비교 (막대그래프)", BODY_STYLE))
-                            story.append(RLImage(tmp_path, width=500, height=280))
-                            story.append(Spacer(1, 16))
-                            print("   - 차트를 PDF에 추가 완료")
-                            
-                            try:
-                                os.unlink(tmp_path)
-                                print("   - 임시 파일 정리 완료")
-                            except:
-                                print("   - 임시 파일 정리 실패 (무시)")
-                                pass
-                                
-                            charts_added = True
-                            print("✅ 비율 비교 차트 생성 완료")
-                        else:
-                            print("❌ 차트 이미지 변환 실패")
-                    else:
-                        print("⚠️ 변환 가능한 데이터가 없음")
-                else:
-                    print("⚠️ 비율 데이터 행이 없음")
-            else:
-                print("⚠️ 재무 데이터가 없거나 '구분' 컬럼이 없음")
-                if financial_data is not None:
-                    print(f"   - 데이터 존재: True, 컬럼: {list(financial_data.columns)}")
-                else:
-                    print("   - 데이터 존재: False")
-        except Exception as e:
-            print(f"❌ 비율 비교 차트 생성 실패: {e}")
-            import traceback
-            print(f"상세 오류: {traceback.format_exc()}")
-
-        # 분기별 추이 그래프들
-        try:
-            if quarterly_df is not None and not quarterly_df.empty:
-                # 영업이익률 추이
-                if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
-                    print("🔄 영업이익률 추이 차트 생성 중...")
-                    fig_line = go.Figure()
-                    companies = quarterly_df['회사'].dropna().unique()
-                    
-                    for comp in companies:
-                        cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
-                        fig_line.add_trace(go.Scatter(
-                            x=cdf['분기'], 
-                            y=cdf['영업이익률'], 
-                            mode='lines+markers', 
-                            name=comp,
-                            line=dict(width=3),
-                            marker=dict(size=8)
-                        ))
-                        
-                    fig_line.update_layout(
-                        title="분기별 영업이익률 추이", 
-                        xaxis_title="분기", 
-                        yaxis_title="영업이익률(%)",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    
-                    img_bytes = fig_to_png_bytes(fig_line)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        story.append(Paragraph("2-2. 분기별 영업이익률 추이", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                        charts_added = True
-                        print("✅ 영업이익률 추이 차트 생성 완료")
-
-                # 매출액 추이
-                if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
-                    print("🔄 매출액 추이 차트 생성 중...")
-                    fig_rev = go.Figure()
-                    
-                    for comp in quarterly_df['회사'].dropna().unique():
-                        cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
-                        fig_rev.add_trace(go.Scatter(
-                            x=cdf['분기'], 
-                            y=cdf['매출액'], 
-                            mode='lines+markers', 
-                            name=comp,
-                            line=dict(width=3),
-                            marker=dict(size=8)
-                        ))
-                        
-                    fig_rev.update_layout(
-                        title="분기별 매출액 추이", 
-                        xaxis_title="분기", 
-                        yaxis_title="매출액(조원)",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    
-                    img_bytes = fig_to_png_bytes(fig_rev)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        story.append(Paragraph("2-3. 분기별 매출액 추이", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                        charts_added = True
-                        print("✅ 매출액 추이 차트 생성 완료")
-        except Exception as e:
-            print(f"⚠️ 분기별 추이 차트 생성 실패: {e}")
-
-        # 외부에서 전달된 차트들
-        try:
-            if selected_charts:
-                print(f"🔄 추가 차트 {len(selected_charts)}개 처리 중...")
-                chart_counter = 4 if charts_added else 1
-                for idx, fig in enumerate(selected_charts, start=chart_counter):
-                    img_bytes = fig_to_png_bytes(fig)
-                    if img_bytes:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                            tmp.write(img_bytes)
-                            tmp_path = tmp.name
-                        story.append(Paragraph(f"2-{idx}. 추가 차트", BODY_STYLE))
-                        story.append(RLImage(tmp_path, width=500, height=280))
-                        story.append(Spacer(1, 16))
-                        try:
-                            os.unlink(tmp_path)
-                        except:
-                            pass
-                charts_added = True
-                print("✅ 추가 차트 처리 완료")
-        except Exception as e:
-            print(f"⚠️ 추가 차트 처리 실패: {e}")
-        
-        if not charts_added:
-            story.append(Paragraph("생성 가능한 차트가 없습니다.", BODY_STYLE))
-            story.append(Spacer(1, 18))
-            print("⚠️ 생성된 차트 없음")
-        
-        print("✅ 차트 섹션 추가 완료")
-        return charts_added
-    except Exception as e:
-        print(f"❌ 차트 섹션 추가 오류: {e}")
-        return False
 
 
 def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, header_color='#E31E24'):
@@ -560,13 +519,11 @@ def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, heade
         print("🔄 AI 인사이트 섹션 추가 중...")
         
         if not insights:
-            story.append(Paragraph("2-AI. 분석 인사이트", BODY_STYLE))
             story.append(Paragraph("AI 인사이트가 제공되지 않았습니다.", BODY_STYLE))
             story.append(Spacer(1, 18))
             print("⚠️ AI 인사이트 없음")
             return
         
-        story.append(Paragraph("2-AI. 분석 인사이트", BODY_STYLE))
         story.append(Spacer(1, 8))
 
         # AI 인사이트 텍스트 처리
@@ -769,10 +726,10 @@ def create_enhanced_pdf_report(
     report_author="보고자 미기재",
     font_paths=None,
 ):
-    """향상된 PDF 보고서 생성"""
+    """향상된 PDF 보고서 생성 (표와 차트 통합 버전)"""
     
     try:
-        print("🔄 PDF 보고서 생성 시작...")
+        print("🔄 PDF 보고서 생성 시작 (통합버전)...")
         print(f"   - 재무데이터: {'있음' if financial_data is not None and not financial_data.empty else '없음'}")
         print(f"   - 뉴스데이터: {'있음' if news_data is not None and not news_data.empty else '없음'}")
         print(f"   - AI인사이트: {'있음' if insights else '없음'}")
@@ -829,14 +786,12 @@ def create_enhanced_pdf_report(
         story.append(Spacer(1, 30))
         print("✅ 보고서 표지 생성 완료")
 
-        # 1. 재무분석 결과
-        add_financial_data_section(story, financial_data, quarterly_df, registered_fonts, HEADING_STYLE, BODY_STYLE)
+        # 1. 재무분석 결과 (표 + 차트 통합)
+        add_financial_data_section(story, financial_data, quarterly_df, selected_charts, 
+                                   registered_fonts, HEADING_STYLE, BODY_STYLE)
         
-        # 2. 시각화 차트 및 분석
-        charts_added = add_charts_section(story, financial_data, quarterly_df, selected_charts, 
-                                        registered_fonts, HEADING_STYLE, BODY_STYLE)
-        
-        # 2-AI. AI 인사이트
+        # 2. AI 인사이트
+        story.append(Paragraph("2. AI 분석 인사이트", HEADING_STYLE))
         add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE)
         
         # 3. 뉴스 하이라이트 및 종합 분석
