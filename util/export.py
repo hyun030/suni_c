@@ -56,27 +56,71 @@ def register_fonts_safe():
     font_paths = get_font_paths()
     registered_fonts = {}
     
-    # 기본 폰트 설정
+    # 기본 폰트 설정 (한글 지원)
     default_fonts = {
-        "Korean": "Helvetica",
-        "KoreanBold": "Helvetica-Bold", 
-        "KoreanSerif": "Times-Roman"
+        "Korean": "DejaVu Sans",      # 한글 지원하는 기본 폰트로 변경
+        "KoreanBold": "DejaVu Sans Bold", 
+        "KoreanSerif": "DejaVu Serif"
     }
     
     for font_name, default_font in default_fonts.items():
         if font_name in font_paths:
             try:
+                # 폰트가 이미 등록되어 있는지 확인
                 if font_name not in pdfmetrics.getRegisteredFontNames():
                     pdfmetrics.registerFont(TTFont(font_name, font_paths[font_name]))
-                    print(f"✅ 폰트 등록 성공: {font_name}")
-                registered_fonts[font_name] = font_name
+                    print(f"✅ 한글 폰트 등록 성공: {font_name}")
+                    registered_fonts[font_name] = font_name
+                else:
+                    print(f"✅ 한글 폰트 이미 등록됨: {font_name}")
+                    registered_fonts[font_name] = font_name
             except Exception as e:
-                print(f"⚠️ 폰트 등록 실패 ({font_name}): {e}")
-                registered_fonts[font_name] = default_font
+                print(f"⚠️ 한글 폰트 등록 실패 ({font_name}): {e}")
+                # 폰트 등록 실패시 한글 지원 기본 폰트 사용
+                try:
+                    # 시스템에서 사용 가능한 한글 폰트 찾기
+                    available_fonts = pdfmetrics.getRegisteredFontNames()
+                    
+                    # 한글 지원 가능한 폰트들 우선순위
+                    korean_fonts = ['DejaVu Sans', 'Arial Unicode MS', 'Malgun Gothic', 'Batang', 'Gulim']
+                    
+                    found_font = None
+                    for kfont in korean_fonts:
+                        if kfont in available_fonts:
+                            found_font = kfont
+                            break
+                    
+                    if found_font:
+                        registered_fonts[font_name] = found_font
+                        print(f"🔄 대체 한글 폰트 사용: {font_name} -> {found_font}")
+                    else:
+                        registered_fonts[font_name] = default_font
+                        print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
+                except:
+                    registered_fonts[font_name] = default_font
         else:
-            registered_fonts[font_name] = default_font
-            print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
+            # 폰트 파일이 없는 경우에도 한글 지원 폰트 찾기
+            try:
+                available_fonts = pdfmetrics.getRegisteredFontNames()
+                korean_fonts = ['DejaVu Sans', 'Arial Unicode MS', 'Malgun Gothic', 'Batang', 'Gulim']
+                
+                found_font = None
+                for kfont in korean_fonts:
+                    if kfont in available_fonts:
+                        found_font = kfont
+                        break
+                
+                if found_font:
+                    registered_fonts[font_name] = found_font
+                    print(f"🔄 시스템 한글 폰트 사용: {font_name} -> {found_font}")
+                else:
+                    registered_fonts[font_name] = default_font
+                    print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
+            except:
+                registered_fonts[font_name] = default_font
+                print(f"🔄 최종 기본 폰트 사용: {font_name} -> {default_font}")
     
+    print(f"🎯 최종 폰트 매핑: {registered_fonts}")
     return registered_fonts
 
 
@@ -378,12 +422,22 @@ def split_dataframe_for_pdf(df, max_rows_per_page=20, max_cols_per_page=8):
 
 
 def safe_str_convert(value):
-    """안전하게 값을 문자열로 변환"""
+    """안전하게 값을 문자열로 변환 (한글 지원)"""
     try:
         if pd.isna(value):
             return ""
-        return str(value)
-    except:
+        
+        # 한글이 포함된 문자열 처리
+        result = str(value)
+        
+        # HTML 특수문자 이스케이프 (reportlab에서 문제가 될 수 있음)
+        result = result.replace('&', '&amp;')
+        result = result.replace('<', '&lt;')
+        result = result.replace('>', '&gt;')
+        
+        return result
+    except Exception as e:
+        print(f"⚠️ 문자열 변환 오류: {e}")
         return ""
 
 
@@ -912,3 +966,4 @@ def generate_report_with_gpt_insights(
     except Exception as e:
         print(f"❌ 완전한 보고서 생성 실패: {e}")
         raise e
+    
