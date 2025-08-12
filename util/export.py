@@ -834,13 +834,13 @@ def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE
 def create_enhanced_pdf_report(
     financial_data=None,
     news_data=None,
-    insights: str | None = None,
-    selected_charts: list | None = None,
-    quarterly_df: pd.DataFrame | None = None,
-    show_footer: bool = False,
-    report_target: str = "SK이노베이션 경영진",
-    report_author: str = "보고자 미기재",
-    font_paths: dict | None = None,
+    insights=None,
+    selected_charts=None,
+    quarterly_df=None,
+    show_footer=False,
+    report_target="SK이노베이션 경영진",
+    report_author="보고자 미기재",
+    font_paths=None,
 ):
     """향상된 PDF 보고서 생성"""
     
