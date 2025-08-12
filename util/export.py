@@ -56,71 +56,27 @@ def register_fonts_safe():
     font_paths = get_font_paths()
     registered_fonts = {}
     
-    # 기본 폰트 설정 (한글 지원)
+    # 기본 폰트 설정
     default_fonts = {
-        "Korean": "DejaVu Sans",      # 한글 지원하는 기본 폰트로 변경
-        "KoreanBold": "DejaVu Sans Bold", 
-        "KoreanSerif": "DejaVu Serif"
+        "Korean": "Helvetica",
+        "KoreanBold": "Helvetica-Bold", 
+        "KoreanSerif": "Times-Roman"
     }
     
     for font_name, default_font in default_fonts.items():
         if font_name in font_paths:
             try:
-                # 폰트가 이미 등록되어 있는지 확인
                 if font_name not in pdfmetrics.getRegisteredFontNames():
                     pdfmetrics.registerFont(TTFont(font_name, font_paths[font_name]))
-                    print(f"✅ 한글 폰트 등록 성공: {font_name}")
-                    registered_fonts[font_name] = font_name
-                else:
-                    print(f"✅ 한글 폰트 이미 등록됨: {font_name}")
-                    registered_fonts[font_name] = font_name
+                    print(f"✅ 폰트 등록 성공: {font_name}")
+                registered_fonts[font_name] = font_name
             except Exception as e:
-                print(f"⚠️ 한글 폰트 등록 실패 ({font_name}): {e}")
-                # 폰트 등록 실패시 한글 지원 기본 폰트 사용
-                try:
-                    # 시스템에서 사용 가능한 한글 폰트 찾기
-                    available_fonts = pdfmetrics.getRegisteredFontNames()
-                    
-                    # 한글 지원 가능한 폰트들 우선순위
-                    korean_fonts = ['DejaVu Sans', 'Arial Unicode MS', 'Malgun Gothic', 'Batang', 'Gulim']
-                    
-                    found_font = None
-                    for kfont in korean_fonts:
-                        if kfont in available_fonts:
-                            found_font = kfont
-                            break
-                    
-                    if found_font:
-                        registered_fonts[font_name] = found_font
-                        print(f"🔄 대체 한글 폰트 사용: {font_name} -> {found_font}")
-                    else:
-                        registered_fonts[font_name] = default_font
-                        print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
-                except:
-                    registered_fonts[font_name] = default_font
-        else:
-            # 폰트 파일이 없는 경우에도 한글 지원 폰트 찾기
-            try:
-                available_fonts = pdfmetrics.getRegisteredFontNames()
-                korean_fonts = ['DejaVu Sans', 'Arial Unicode MS', 'Malgun Gothic', 'Batang', 'Gulim']
-                
-                found_font = None
-                for kfont in korean_fonts:
-                    if kfont in available_fonts:
-                        found_font = kfont
-                        break
-                
-                if found_font:
-                    registered_fonts[font_name] = found_font
-                    print(f"🔄 시스템 한글 폰트 사용: {font_name} -> {found_font}")
-                else:
-                    registered_fonts[font_name] = default_font
-                    print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
-            except:
+                print(f"⚠️ 폰트 등록 실패 ({font_name}): {e}")
                 registered_fonts[font_name] = default_font
-                print(f"🔄 최종 기본 폰트 사용: {font_name} -> {default_font}")
+        else:
+            registered_fonts[font_name] = default_font
+            print(f"🔄 기본 폰트 사용: {font_name} -> {default_font}")
     
-    print(f"🎯 최종 폰트 매핑: {registered_fonts}")
     return registered_fonts
 
 
@@ -203,7 +159,7 @@ def generate_strategic_recommendations(insights, financial_data=None, gpt_api_ke
 
 
 def save_chart_as_image(fig, filename_prefix="chart"):
-    """Streamlit 차트를 이미지 파일로 저장 (다양한 차트 타입 지원)"""
+    """Streamlit 차트를 이미지 파일로 저장"""
     try:
         # 임시 파일 생성
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
@@ -231,17 +187,6 @@ def save_chart_as_image(fig, filename_prefix="chart"):
                 except Exception as e2:
                     print(f"⚠️ Plotly 대안 방법도 실패: {e2}")
         
-        # Plotly 객체에서 to_image 메서드가 있는 경우
-        elif hasattr(fig, 'to_image'):
-            try:
-                img_bytes = fig.to_image(format="png", width=800, height=500)
-                with open(temp_path, 'wb') as f:
-                    f.write(img_bytes)
-                print(f"✅ to_image 메서드 성공")
-                return temp_path
-            except Exception as e:
-                print(f"⚠️ to_image 메서드 실패: {e}")
-        
         # Matplotlib 차트인 경우  
         elif hasattr(fig, 'savefig'):
             try:
@@ -251,50 +196,9 @@ def save_chart_as_image(fig, filename_prefix="chart"):
             except Exception as e:
                 print(f"⚠️ Matplotlib 저장 실패: {e}")
         
-        # Altair 차트인 경우
-        elif hasattr(fig, 'save'):
-            try:
-                fig.save(temp_path)
-                print(f"✅ Altair 차트 저장 성공")
-                return temp_path
-            except Exception as e:
-                print(f"⚠️ Altair 저장 실패: {e}")
-        
-        # PIL Image인 경우
-        elif hasattr(fig, 'save') and hasattr(fig, 'mode'):
-            try:
-                fig.save(temp_path, 'PNG')
-                print(f"✅ PIL Image 저장 성공")
-                return temp_path
-            except Exception as e:
-                print(f"⚠️ PIL Image 저장 실패: {e}")
-        
-        # 기타 객체에서 figure 속성을 찾아보기
-        elif hasattr(fig, 'figure'):
-            try:
-                return save_chart_as_image(fig.figure, filename_prefix)
-            except Exception as e:
-                print(f"⚠️ figure 속성 접근 실패: {e}")
-        
-        # 최후 수단: 객체를 문자열로 변환해서 확인
+        # 기타 차트 타입들...
         else:
-            fig_str = str(type(fig))
-            print(f"❌ 지원하지 않는 차트 타입: {fig_str}")
-            print(f"   사용 가능한 속성들: {[attr for attr in dir(fig) if not attr.startswith('_')][:10]}")
-            
-            # 혹시 _repr_png_ 같은 메서드가 있는지 확인
-            if hasattr(fig, '_repr_png_'):
-                try:
-                    png_data = fig._repr_png_()
-                    if png_data:
-                        with open(temp_path, 'wb') as f:
-                            f.write(png_data)
-                        print(f"✅ _repr_png_ 메서드 성공")
-                        return temp_path
-                except Exception as e:
-                    print(f"⚠️ _repr_png_ 실패: {e}")
-            
-            # 파일 삭제하고 None 반환
+            print(f"❌ 지원하지 않는 차트 타입: {type(fig)}")
             try:
                 os.unlink(temp_path)
             except:
@@ -315,9 +219,33 @@ def save_chart_as_image(fig, filename_prefix="chart"):
             
     except Exception as e:
         print(f"❌ 차트 이미지 저장 실패: {e}")
-        import traceback
-        print(f"상세 오류: {traceback.format_exc()}")
         return None
+
+
+def capture_streamlit_charts(chart_objects):
+    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
+    chart_paths = []
+    
+    if not chart_objects:
+        print("⚠️ 차트 객체가 없습니다")
+        return chart_paths
+    
+    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
+    
+    for i, chart in enumerate(chart_objects):
+        if chart is not None:
+            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
+            if chart_path:
+                chart_paths.append(chart_path)
+                print(f"✅ 차트 {i+1} 성공")
+            else:
+                print(f"❌ 차트 {i+1} 실패")
+        else:
+            print(f"⚠️ 차트 {i+1}이 None입니다")
+    
+    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
+    return chart_paths
 
 
 def clean_ai_text(raw):
@@ -422,22 +350,12 @@ def split_dataframe_for_pdf(df, max_rows_per_page=20, max_cols_per_page=8):
 
 
 def safe_str_convert(value):
-    """안전하게 값을 문자열로 변환 (한글 지원)"""
+    """안전하게 값을 문자열로 변환"""
     try:
         if pd.isna(value):
             return ""
-        
-        # 한글이 포함된 문자열 처리
-        result = str(value)
-        
-        # HTML 특수문자 이스케이프 (reportlab에서 문제가 될 수 있음)
-        result = result.replace('&', '&amp;')
-        result = result.replace('<', '&lt;')
-        result = result.replace('>', '&gt;')
-        
-        return result
-    except Exception as e:
-        print(f"⚠️ 문자열 변환 오류: {e}")
+        return str(value)
+    except:
         return ""
 
 
@@ -514,53 +432,29 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
         else:
             story.append(Paragraph("1-2. SK에너지 대비 경쟁사 갭차이 분석: 데이터가 없습니다.", BODY_STYLE))
         
-        # 1-3. 차트 이미지들 추가 (무조건 섹션 생성)
-        story.append(Spacer(1, 12))
-        story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
-        story.append(Spacer(1, 8))
-        
+        # 1-3. 차트 이미지들 추가
         if chart_images and len(chart_images) > 0:
-            print(f"🔄 {len(chart_images)}개 차트 이미지 PDF에 추가 중...")
+            story.append(Spacer(1, 12))
+            story.append(Paragraph("1-3. 시각화 차트", BODY_STYLE))
+            story.append(Spacer(1, 8))
             
             for i, chart_path in enumerate(chart_images, 1):
-                print(f"🔄 차트 {i} 처리: {chart_path}")
-                
-                if chart_path:
-                    if isinstance(chart_path, str):
-                        if os.path.exists(chart_path):
-                            try:
-                                file_size = os.path.getsize(chart_path)
-                                print(f"  파일 크기: {file_size} bytes")
-                                
-                                story.append(Paragraph(f"차트 {i}", BODY_STYLE))
-                                story.append(RLImage(chart_path, width=500, height=300))
-                                story.append(Spacer(1, 16))
-                                print(f"✅ 차트 {i} PDF 추가 성공")
-                            except Exception as e:
-                                print(f"❌ 차트 {i} PDF 추가 실패: {e}")
-                                story.append(Paragraph(f"차트 {i}: 이미지 로드 실패 - {str(e)}", BODY_STYLE))
-                        else:
-                            print(f"❌ 차트 파일이 존재하지 않음: {chart_path}")
-                            story.append(Paragraph(f"차트 {i}: 파일이 존재하지 않음", BODY_STYLE))
-                    else:
-                        print(f"❌ 차트 경로가 문자열이 아님: {type(chart_path)}")
-                        story.append(Paragraph(f"차트 {i}: 잘못된 경로 타입", BODY_STYLE))
+                if chart_path and os.path.exists(chart_path):
+                    try:
+                        story.append(Paragraph(f"차트 {i}", BODY_STYLE))
+                        story.append(RLImage(chart_path, width=500, height=300))
+                        story.append(Spacer(1, 16))
+                        print(f"✅ 차트 {i} 추가 완료")
+                    except Exception as e:
+                        print(f"⚠️ 차트 {i} 추가 실패: {e}")
+                        story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
                 else:
-                    print(f"❌ 차트 경로가 None 또는 빈 값")
-                    story.append(Paragraph(f"차트 {i}: 경로가 비어있음", BODY_STYLE))
-        else:
-            print("❌ chart_images가 비어있거나 None입니다")
-            print(f"chart_images 값: {chart_images}")
-            print(f"chart_images 타입: {type(chart_images)}")
-            story.append(Paragraph("⚠️ 차트 데이터 처리 중 문제가 발생했습니다.", BODY_STYLE))
-            story.append(Paragraph("디버깅 정보를 확인해주세요.", BODY_STYLE))
+                    print(f"⚠️ 차트 파일이 없음: {chart_path}")
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
     except Exception as e:
         print(f"❌ 재무분석 섹션 추가 오류: {e}")
-        import traceback
-        print(f"상세 오류: {traceback.format_exc()}")
 
 
 def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, header_color='#E31E24'):
@@ -707,8 +601,8 @@ def create_enhanced_pdf_report(
     show_footer=False,
     report_target="SK이노베이션 경영진",
     report_author="보고자 미기재",
-    gpt_api_key=None,  # GPT API 키 (새로 추가)
-    chart_images=None,  # Streamlit 차트 이미지 경로들 (새로 추가)
+    gpt_api_key=None,  # GPT API 키
+    chart_images=None,  # Streamlit 차트 이미지 경로들
     font_paths=None,
 ):
     """향상된 PDF 보고서 생성 (GPT 전략 제안 포함)"""
@@ -716,43 +610,23 @@ def create_enhanced_pdf_report(
     try:
         print("🔄 PDF 보고서 생성 시작...")
         
-        # 하위 호환성: selected_charts가 있으면 chart_images로 변환
-        print("🔍 차트 변환 프로세스 시작...")
-        print(f"selected_charts: {selected_charts}")
-        print(f"chart_images: {chart_images}")
-        
+        # 하위 호환성: selected_charts를 chart_images로 변환
         if selected_charts and not chart_images:
             print("🔄 selected_charts를 chart_images로 변환 중...")
-            print(f"selected_charts 타입: {type(selected_charts)}")
-            print(f"selected_charts 길이: {len(selected_charts) if selected_charts else 0}")
-            
             if isinstance(selected_charts, list) and len(selected_charts) > 0:
-                # 첫 번째 항목을 확인해서 차트 객체인지 이미지 경로인지 판단
                 first_item = selected_charts[0]
-                print(f"첫 번째 항목 타입: {type(first_item)}")
-                print(f"첫 번째 항목 값: {first_item}")
-                
                 if isinstance(first_item, str):
                     # 이미 이미지 경로들인 경우
                     chart_images = selected_charts
-                    print("✅ 이미지 경로들로 인식")
                 else:
                     # Plotly 차트 객체들인 경우 이미지로 변환
-                    print("🔄 차트 객체들을 이미지로 변환 시작...")
                     chart_images = capture_streamlit_charts(selected_charts)
-                    print(f"✅ {len(chart_images)}개 차트 이미지 변환 완료")
             else:
                 chart_images = []
-                print("❌ selected_charts가 빈 리스트이거나 올바르지 않은 형식")
         
-        # chart_images 최종 확인
+        # chart_images가 없으면 빈 리스트로 설정
         if not chart_images:
             chart_images = []
-            print("⚠️ 최종적으로 chart_images가 비어있습니다")
-        else:
-            print(f"✅ 최종 chart_images: {len(chart_images)}개")
-            for i, img in enumerate(chart_images):
-                print(f"  이미지 {i+1}: {img}")
         
         # 폰트 등록
         registered_fonts = register_fonts_safe()
@@ -809,7 +683,7 @@ def create_enhanced_pdf_report(
         story.append(Paragraph("2. AI 분석 인사이트", HEADING_STYLE))
         add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE)
         
-        # 3. GPT 기반 전략 제안 (AI 인사이트가 있을 때만) - 섹션 번호 변경
+        # 3. GPT 기반 전략 제안 (AI 인사이트가 있을 때만)
         if insights:
             print("🔄 GPT 전략 제안 생성 중...")
             strategic_recommendations = generate_strategic_recommendations(
@@ -821,9 +695,9 @@ def create_enhanced_pdf_report(
         else:
             print("⚠️ AI 인사이트가 없어서 GPT 전략 제안을 생성하지 않습니다")
         
-        # 4. 뉴스 하이라이트 및 종합 분석 - 섹션 번호 변경
+        # 4. 뉴스 하이라이트 및 종합 분석
         story.append(Paragraph("4. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
-        add_news_section_content(story, news_data, insights, registered_fonts, BODY_STYLE)
+        add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE)
 
         # 푸터 (선택사항)
         if show_footer:
@@ -881,44 +755,6 @@ def create_enhanced_pdf_report(
         except Exception as e2:
             print(f"❌ 에러 보고서 생성도 실패: {e2}")
             raise e
-
-
-# Streamlit에서 사용할 헬퍼 함수들
-def capture_streamlit_charts(chart_objects):
-    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
-    chart_paths = []
-    
-    if not chart_objects:
-        print("❌ chart_objects가 None이거나 비어있습니다")
-        return chart_paths
-    
-    print(f"🔄 {len(chart_objects)}개 차트 객체 이미지 변환 시작...")
-    print(f"chart_objects 타입: {type(chart_objects)}")
-    
-    for i, chart in enumerate(chart_objects):
-        print(f"\n--- 차트 {i+1} 변환 시작 ---")
-        if chart is not None:
-            print(f"차트 타입: {type(chart)}")
-            print(f"차트 속성들: {[attr for attr in dir(chart) if not attr.startswith('_')][:10]}")
-            
-            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
-            if chart_path:
-                chart_paths.append(chart_path)
-                print(f"✅ 차트 {i+1} 이미지 변환 성공: {chart_path}")
-            else:
-                print(f"❌ 차트 {i+1} 이미지 변환 실패")
-        else:
-            print(f"❌ 차트 {i+1}이 None입니다")
-    
-    print(f"\n🎯 최종 결과: {len(chart_paths)}개 차트 이미지 생성 완료")
-    for i, path in enumerate(chart_paths, 1):
-        if os.path.exists(path):
-            size = os.path.getsize(path)
-            print(f"  차트 {i}: {path} ({size} bytes)")
-        else:
-            print(f"  차트 {i}: {path} (파일 없음)")
-    
-    return chart_paths
 
 
 def generate_report_with_gpt_insights(
