@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-완전한 PDF/Excel 보고서 생성 모듈 (Chrome 자동 설치 포함)
-설치 필요: pip install kaleido plotly reportlab pandas openpyxl
-"""
-
 import io
 import os
 import tempfile
@@ -11,8 +6,6 @@ import pandas as pd
 from datetime import datetime
 import streamlit as st
 import re
-import subprocess
-import sys
 
 # reportlab import
 from reportlab.lib.pagesizes import A4
@@ -24,132 +17,22 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# OpenAI GPT 연동을 위한 import (선택사항)
+# OpenAI GPT 연동을 위한 import (필요시)
 try:
     import openai
     GPT_AVAILABLE = True
 except ImportError:
     GPT_AVAILABLE = False
-    print("⚠️ OpenAI 패키지가 없습니다. GPT 기능을 사용하려면 'pip install openai'를 실행하세요.")
 
-# Plotly import 및 Chrome/kaleido 자동 설치
+# Plotly import 및 사용 가능 여부 체크
 try:
     import plotly.express as px
     import plotly.graph_objects as go
-    import plotly.io as pio
     PLOTLY_AVAILABLE = True
     print("✅ Plotly 라이브러리 로드 성공")
 except ImportError as e:
     PLOTLY_AVAILABLE = False
     print(f"⚠️ Plotly 라이브러리 로드 실패: {e}")
-    print("다음 명령어로 설치하세요: pip install plotly kaleido")
-
-
-def install_chrome_if_needed():
-    """Chrome이 없으면 자동으로 설치 시도"""
-    if not PLOTLY_AVAILABLE:
-        print("❌ Plotly가 없어서 Chrome 설치를 건너뜁니다.")
-        return False
-        
-    try:
-        import kaleido
-        print("✅ kaleido 패키지 발견")
-        
-        # kaleido가 정상 작동하는지 테스트
-        import plotly.graph_objects as go
-        test_fig = go.Figure(data=go.Bar(x=['테스트'], y=[1]))
-        
-        # 임시 파일로 테스트
-        temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        test_fig.write_image(temp_path, engine='kaleido', width=100, height=100)
-        
-        # 성공하면 파일 삭제하고 리턴
-        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-            os.unlink(temp_path)
-            print("✅ Chrome이 이미 설치되어 있고 kaleido가 정상 작동합니다.")
-            return True
-        else:
-            raise Exception("테스트 이미지 생성 실패")
-            
-    except ImportError:
-        print("❌ kaleido가 설치되지 않았습니다.")
-        print("🔄 kaleido 설치를 시도합니다...")
-        
-        try:
-            result = subprocess.run([sys.executable, '-m', 'pip', 'install', 'kaleido'], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                print("✅ kaleido 설치 완료!")
-                # 다시 테스트
-                return install_chrome_if_needed()
-            else:
-                print(f"❌ kaleido 설치 실패: {result.stderr}")
-                return False
-        except Exception as e:
-            print(f"❌ kaleido 설치 중 오류: {e}")
-            return False
-            
-    except Exception as e:
-        print(f"⚠️ Chrome/kaleido 오류 감지: {e}")
-        print("🔄 Chrome 자동 설치를 시도합니다...")
-        
-        try:
-            # 1. plotly_get_chrome 실행
-            result = subprocess.run(['plotly_get_chrome'], 
-                                   capture_output=True, text=True, shell=True, timeout=300)
-            
-            if result.returncode == 0:
-                print("✅ plotly_get_chrome 실행 완료!")
-                print("🔄 다시 테스트합니다...")
-                
-                # 다시 테스트
-                test_fig = go.Figure(data=go.Bar(x=['테스트'], y=[1]))
-                temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-                temp_path = temp_file.name
-                temp_file.close()
-                
-                test_fig.write_image(temp_path, engine='kaleido', width=100, height=100)
-                
-                if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                    os.unlink(temp_path)
-                    print("✅ Chrome 설치 후 kaleido 정상 작동 확인!")
-                    return True
-                else:
-                    print("❌ Chrome 설치 후에도 여전히 문제가 있습니다.")
-                    return False
-                    
-            else:
-                print(f"❌ plotly_get_chrome 실행 실패: {result.stderr}")
-                
-                # 2. 대안: 수동 안내
-                print("👨‍💻 수동으로 다음을 실행해주세요:")
-                print("   터미널에서: plotly_get_chrome")
-                print("   또는 Google Chrome을 직접 설치하세요.")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            print("⏰ Chrome 설치 시간 초과 (5분)")
-            print("👨‍💻 수동으로 실행해주세요: plotly_get_chrome")
-            return False
-        except Exception as install_error:
-            print(f"❌ Chrome 설치 중 오류: {install_error}")
-            print("👨‍💻 수동으로 다음을 실행해주세요:")
-            print("   터미널에서: plotly_get_chrome")
-            return False
-
-
-# Chrome 자동 설치 시도
-CHROME_AVAILABLE = False
-if PLOTLY_AVAILABLE:
-    print("🔄 Chrome/kaleido 상태 확인 중...")
-    CHROME_AVAILABLE = install_chrome_if_needed()
-    if CHROME_AVAILABLE:
-        print("✅ 차트 기능 완전 활성화!")
-    else:
-        print("⚠️ 차트 기능 제한적 사용 (Chrome 없음)")
 
 
 def get_company_color(company, companies):
@@ -175,7 +58,6 @@ def get_company_color(company, companies):
 def create_sk_bar_chart(chart_df: pd.DataFrame):
     """SK에너지 강조 막대 차트"""
     if not PLOTLY_AVAILABLE or chart_df.empty: 
-        print("⚠️ Plotly가 없거나 데이터가 비어있어 차트를 생성할 수 없습니다.")
         return None
     
     companies = chart_df['회사'].unique()
@@ -197,7 +79,6 @@ def create_sk_bar_chart(chart_df: pd.DataFrame):
 def create_sk_radar_chart(chart_df):
     """SK에너지 중심 레이더 차트 (지표별 Min-Max 정규화 적용)"""
     if chart_df.empty or not PLOTLY_AVAILABLE:
-        print("⚠️ Plotly가 없거나 데이터가 비어있어 레이더 차트를 생성할 수 없습니다.")
         return None
     
     companies = chart_df['회사'].unique() if '회사' in chart_df.columns else []
@@ -290,7 +171,6 @@ def create_sk_radar_chart(chart_df):
 def create_quarterly_trend_chart(quarterly_df: pd.DataFrame):
     """분기별 추이 혼합 차트"""
     if not PLOTLY_AVAILABLE or quarterly_df.empty: 
-        print("⚠️ Plotly가 없거나 데이터가 비어있어 분기별 차트를 생성할 수 없습니다.")
         return None
 
     fig = go.Figure()
@@ -318,7 +198,6 @@ def create_quarterly_trend_chart(quarterly_df: pd.DataFrame):
 def create_gap_trend_chart(quarterly_df: pd.DataFrame):
     """분기별 갭 추이 차트"""
     if not PLOTLY_AVAILABLE or quarterly_df.empty: 
-        print("⚠️ Plotly가 없거나 데이터가 비어있어 갭 추이 차트를 생성할 수 없습니다.")
         return None
 
     fig = go.Figure()
@@ -397,7 +276,6 @@ def create_gap_analysis(financial_df: pd.DataFrame, raw_cols: list):
 def create_gap_chart(gap_analysis_df: pd.DataFrame):
     """갭차이 시각화 차트"""
     if not PLOTLY_AVAILABLE or gap_analysis_df.empty:
-        print("⚠️ Plotly가 없거나 데이터가 비어있어 갭 차트를 생성할 수 없습니다.")
         return None
     
     # 갭% 컬럼만 추출
@@ -447,116 +325,6 @@ def create_gap_chart(gap_analysis_df: pd.DataFrame):
     )
     
     return fig
-
-
-def save_chart_as_image(fig, filename_prefix="chart"):
-    """Chrome 자동 설치 후 차트를 이미지로 저장"""
-    try:
-        if not PLOTLY_AVAILABLE:
-            print("❌ Plotly가 설치되지 않아 차트를 저장할 수 없습니다.")
-            return None
-            
-        # 임시 파일 생성
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
-        temp_path = temp_file.name
-        temp_file.close()
-        
-        print(f"🔄 차트 저장 시도: {type(fig)} -> {temp_path}")
-        
-        # Plotly 차트를 고해상도 PNG로 저장
-        if hasattr(fig, 'write_image'):
-            try:
-                # Chrome 있을 때: 최고 품질
-                if CHROME_AVAILABLE:
-                    fig.write_image(
-                        temp_path, 
-                        format='png',
-                        width=1200,    # 더 높은 해상도
-                        height=700, 
-                        scale=3,       # 3배 확대로 최고 선명도
-                        engine='kaleido'
-                    )
-                    print(f"✅ Chrome + kaleido로 고품질 차트 저장 성공")
-                else:
-                    # Chrome 없을 때: 대안 방법들
-                    try:
-                        import plotly.io as pio
-                        img_bytes = pio.to_image(fig, format='png', width=1000, height=600, scale=2)
-                        with open(temp_path, 'wb') as f:
-                            f.write(img_bytes)
-                        print(f"✅ plotly.io 대안 방법으로 차트 저장 성공")
-                    except Exception as e2:
-                        print(f"⚠️ plotly.io도 실패: {e2}")
-                        print("💡 Chrome을 설치하면 더 좋은 품질의 차트를 얻을 수 있습니다.")
-                        return None
-                
-                # 파일이 실제로 생성되었는지 확인
-                if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                    file_size = os.path.getsize(temp_path)
-                    print(f"✅ 차트 이미지 저장: {temp_path} ({file_size} bytes)")
-                    return temp_path
-                else:
-                    print(f"❌ 차트 파일이 비어있거나 생성되지 않음")
-                    return None
-                    
-            except Exception as e:
-                print(f"⚠️ 차트 저장 실패: {e}")
-                return None
-        else:
-            print(f"❌ 지원하지 않는 차트 타입: {type(fig)}")
-            return None
-            
-    except Exception as e:
-        print(f"❌ 차트 이미지 저장 실패: {e}")
-        return None
-
-
-def capture_streamlit_charts(chart_objects):
-    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
-    chart_paths = []
-    
-    if not chart_objects:
-        print("⚠️ 차트 객체가 없습니다")
-        return chart_paths
-    
-    if not PLOTLY_AVAILABLE:
-        print("❌ Plotly가 설치되지 않아 차트 변환을 할 수 없습니다.")
-        print("다음 명령어로 설치하세요: pip install plotly kaleido")
-        return chart_paths
-    
-    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
-    
-    success_count = 0
-    for i, chart in enumerate(chart_objects):
-        if chart is not None:
-            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
-            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
-            if chart_path:
-                chart_paths.append(chart_path)
-                success_count += 1
-                print(f"✅ 차트 {i+1} 성공")
-            else:
-                print(f"❌ 차트 {i+1} 실패")
-        else:
-            print(f"⚠️ 차트 {i+1}이 None입니다")
-    
-    print(f"✅ 총 {success_count}개 차트 이미지 생성 완료")
-    
-    # 결과에 따른 안내 메시지
-    if success_count == 0 and len(chart_objects) > 0:
-        if not CHROME_AVAILABLE:
-            print("🚨 Chrome이 설치되지 않아서 차트를 이미지로 변환할 수 없습니다.")
-            print("💡 더 좋은 품질의 보고서를 원하시면:")
-            print("   터미널에서: plotly_get_chrome")
-        else:
-            print("🚨 알 수 없는 이유로 차트 변환에 실패했습니다.")
-    elif success_count > 0:
-        if CHROME_AVAILABLE:
-            print("🎉 Chrome이 설치되어 있어서 최고 품질의 차트가 생성되었습니다!")
-        else:
-            print("✅ Chrome 없이도 차트 생성에 성공했습니다.")
-    
-    return chart_paths
 
 
 def get_font_paths():
@@ -690,6 +458,96 @@ def generate_strategic_recommendations(insights, financial_data=None, gpt_api_ke
     except Exception as e:
         print(f"❌ GPT 전략 제안 생성 실패: {e}")
         return f"전략 제안 생성 중 오류가 발생했습니다: {str(e)}"
+
+
+def save_chart_as_image(fig, filename_prefix="chart"):
+    """Streamlit 차트를 이미지 파일로 저장"""
+    try:
+        # 임시 파일 생성
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', prefix=f'{filename_prefix}_')
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        print(f"🔄 차트 저장 시도: {type(fig)} -> {temp_path}")
+        
+        # Plotly 차트인 경우
+        if hasattr(fig, 'write_image'):
+            try:
+                fig.write_image(temp_path, width=800, height=500, scale=2)
+                print(f"✅ Plotly 차트 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ Plotly write_image 실패: {e}")
+                # Plotly 대안 방법
+                try:
+                    import plotly.io as pio
+                    img_bytes = pio.to_image(fig, format='png', width=800, height=500)
+                    with open(temp_path, 'wb') as f:
+                        f.write(img_bytes)
+                    print(f"✅ Plotly pio.to_image 성공")
+                    return temp_path
+                except Exception as e2:
+                    print(f"⚠️ Plotly 대안 방법도 실패: {e2}")
+        
+        # Matplotlib 차트인 경우  
+        elif hasattr(fig, 'savefig'):
+            try:
+                fig.savefig(temp_path, dpi=300, bbox_inches='tight', facecolor='white')
+                print(f"✅ Matplotlib 차트 저장 성공")
+                return temp_path
+            except Exception as e:
+                print(f"⚠️ Matplotlib 저장 실패: {e}")
+        
+        # 기타 차트 타입들...
+        else:
+            print(f"❌ 지원하지 않는 차트 타입: {type(fig)}")
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            return None
+            
+        # 파일이 실제로 생성되었는지 확인
+        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+            print(f"✅ 차트 이미지 저장: {temp_path} ({os.path.getsize(temp_path)} bytes)")
+            return temp_path
+        else:
+            print(f"❌ 차트 파일이 비어있거나 생성되지 않음")
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            return None
+            
+    except Exception as e:
+        print(f"❌ 차트 이미지 저장 실패: {e}")
+        return None
+
+
+def capture_streamlit_charts(chart_objects):
+    """Streamlit 차트 객체들을 이미지 파일로 저장하고 경로 리스트 반환"""
+    chart_paths = []
+    
+    if not chart_objects:
+        print("⚠️ 차트 객체가 없습니다")
+        return chart_paths
+    
+    print(f"🔄 {len(chart_objects)}개 차트 처리 시작...")
+    
+    for i, chart in enumerate(chart_objects):
+        if chart is not None:
+            print(f"🔄 차트 {i+1} 처리 중: {type(chart)}")
+            chart_path = save_chart_as_image(chart, f"chart_{i+1}")
+            if chart_path:
+                chart_paths.append(chart_path)
+                print(f"✅ 차트 {i+1} 성공")
+            else:
+                print(f"❌ 차트 {i+1} 실패")
+        else:
+            print(f"⚠️ 차트 {i+1}이 None입니다")
+    
+    print(f"✅ 총 {len(chart_paths)}개 차트 이미지 생성 완료")
+    return chart_paths
 
 
 def clean_ai_text(raw):
@@ -886,12 +744,7 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
                 if chart_path and os.path.exists(chart_path):
                     try:
                         story.append(Paragraph(f"차트 {i}", BODY_STYLE))
-                        if CHROME_AVAILABLE:
-                            # Chrome 있을 때: 더 큰 사이즈로 표시 (고품질이므로)
-                            story.append(RLImage(chart_path, width=540, height=324))
-                        else:
-                            # Chrome 없을 때: 기본 사이즈
-                            story.append(RLImage(chart_path, width=500, height=300))
+                        story.append(RLImage(chart_path, width=500, height=300))
                         story.append(Spacer(1, 16))
                         print(f"✅ 차트 {i} 추가 완료")
                     except Exception as e:
@@ -899,10 +752,6 @@ def add_financial_data_section(story, financial_data, quarterly_df, chart_images
                         story.append(Paragraph(f"차트 {i}: 이미지 로드 실패", BODY_STYLE))
                 else:
                     print(f"⚠️ 차트 파일이 없음: {chart_path}")
-        else:
-            story.append(Paragraph("1-3. 시각화 차트: 차트 데이터가 없습니다.", BODY_STYLE))
-            if not CHROME_AVAILABLE:
-                story.append(Paragraph("💡 Chrome을 설치하면 차트가 포함된 보고서를 생성할 수 있습니다.", BODY_STYLE))
         
         story.append(Spacer(1, 18))
         print("✅ 재무분석 섹션 추가 완료")
@@ -1058,18 +907,10 @@ def create_enhanced_pdf_report(
     chart_images=None,  # Streamlit 차트 이미지 경로들
     font_paths=None,
 ):
-    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함, Chrome 자동 설치)"""
+    """향상된 PDF 보고서 생성 (GPT 전략 제안 포함)"""
     
     try:
         print("🔄 PDF 보고서 생성 시작...")
-        
-        # Chrome/kaleido 상태 출력
-        if CHROME_AVAILABLE:
-            print("✅ Chrome이 설치되어 있어서 최고 품질의 차트가 포함됩니다!")
-        elif PLOTLY_AVAILABLE:
-            print("⚠️ Chrome이 없어서 차트 품질이 제한적입니다.")
-        else:
-            print("❌ Plotly가 없어서 차트를 생성할 수 없습니다.")
         
         # 하위 호환성: selected_charts를 chart_images로 변환
         if selected_charts and not chart_images:
@@ -1189,13 +1030,7 @@ def create_enhanced_pdf_report(
                 except Exception as e:
                     print(f"⚠️ 임시 파일 삭제 실패: {e}")
         
-        success_message = "✅ PDF 보고서 생성 완료!"
-        if CHROME_AVAILABLE:
-            success_message += " (최고 품질 차트 포함)"
-        elif chart_images:
-            success_message += " (제한적 품질 차트 포함)"
-        print(success_message)
-        
+        print("✅ PDF 보고서 생성 완료!")
         return buffer.getvalue()
         
     except Exception as e:
@@ -1234,7 +1069,7 @@ def generate_report_with_gpt_insights(
     **kwargs
 ):
     """
-    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성 (Chrome 자동 설치)
+    Streamlit 차트와 GPT 인사이트를 포함한 완전한 보고서 생성
     
     사용 예시:
     pdf_bytes = generate_report_with_gpt_insights(
@@ -1247,21 +1082,12 @@ def generate_report_with_gpt_insights(
     try:
         print("🔄 완전한 보고서 생성 시작...")
         
-        if not PLOTLY_AVAILABLE:
-            print("❌ Plotly가 설치되지 않았습니다.")
-            print("차트 없이 텍스트 기반 보고서를 생성합니다.")
-        elif not CHROME_AVAILABLE:
-            print("⚠️ Chrome이 없어서 차트 품질이 제한적입니다.")
-            print("💡 더 좋은 품질을 원하시면 터미널에서 'plotly_get_chrome'을 실행하세요.")
-        
         # Streamlit 차트들을 이미지로 변환
         chart_images = []
-        if streamlit_charts and PLOTLY_AVAILABLE:
+        if streamlit_charts:
             print(f"🔄 {len(streamlit_charts)}개 차트를 이미지로 변환 중...")
             chart_images = capture_streamlit_charts(streamlit_charts)
             print(f"✅ {len(chart_images)}개 차트 이미지 생성 완료")
-        elif streamlit_charts and not PLOTLY_AVAILABLE:
-            print("⚠️ Plotly가 없어서 차트를 변환할 수 없습니다.")
         
         # PDF 보고서 생성
         pdf_bytes = create_enhanced_pdf_report(
@@ -1279,113 +1105,3 @@ def generate_report_with_gpt_insights(
     except Exception as e:
         print(f"❌ 완전한 보고서 생성 실패: {e}")
         raise e
-
-
-# 설치 체크 및 안내 함수 (업데이트됨)
-def check_dependencies():
-    """필요한 패키지들이 설치되어 있는지 체크"""
-    missing_packages = []
-    
-    try:
-        import plotly
-        print("✅ plotly 설치됨")
-    except ImportError:
-        missing_packages.append("plotly")
-    
-    try:
-        import kaleido
-        print("✅ kaleido 설치됨")
-    except ImportError:
-        missing_packages.append("kaleido")
-    
-    try:
-        import reportlab
-        print("✅ reportlab 설치됨")
-    except ImportError:
-        missing_packages.append("reportlab")
-    
-    try:
-        import pandas
-        print("✅ pandas 설치됨")
-    except ImportError:
-        missing_packages.append("pandas")
-    
-    try:
-        import openpyxl
-        print("✅ openpyxl 설치됨")
-    except ImportError:
-        missing_packages.append("openpyxl")
-    
-    if missing_packages:
-        print(f"❌ 다음 패키지들을 설치해주세요:")
-        for pkg in missing_packages:
-            print(f"   pip install {pkg}")
-        return False
-    else:
-        print("✅ 모든 필수 패키지가 설치되어 있습니다!")
-        
-        # Chrome 상태도 체크
-        if CHROME_AVAILABLE:
-            print("🎉 Chrome도 설치되어 있어서 최고 품질의 차트를 생성할 수 있습니다!")
-        elif PLOTLY_AVAILABLE:
-            print("⚠️ Chrome이 없어서 차트 품질이 제한적입니다.")
-            print("💡 더 좋은 품질을 원하시면: plotly_get_chrome")
-        
-        return True
-
-
-def get_chrome_installation_guide():
-    """Chrome 설치 안내 함수"""
-    guide = """
-🔧 Chrome 설치 방법:
-
-방법 1: 자동 설치 (권장)
-    터미널에서: plotly_get_chrome
-
-방법 2: 수동 설치
-    - Windows: Chrome 홈페이지에서 다운로드
-    - Mac: brew install --cask google-chrome
-    - Linux: sudo apt-get install google-chrome-stable
-
-설치 후 Python을 다시 시작하면 자동으로 인식됩니다.
-
-💡 Chrome이 있으면:
-    ✅ 고해상도 차트 생성
-    ✅ 정확한 색상과 폰트
-    ✅ 전문적인 PDF 보고서 품질
-"""
-    return guide
-
-
-# 사용 예시
-if __name__ == "__main__":
-    print("📦 SK에너지 보고서 생성 모듈 (Chrome 자동 설치 포함)")
-    print("=" * 60)
-    
-    # 의존성 체크
-    deps_ok = check_dependencies()
-    
-    if PLOTLY_AVAILABLE:
-        if CHROME_AVAILABLE:
-            print("🎯 모든 기능 사용 가능! (최고 품질 차트 포함)")
-        else:
-            print("🎯 기본 기능 사용 가능! (제한적 차트)")
-            print("\n" + get_chrome_installation_guide())
-    else:
-        print("⚠️ 차트 기능을 사용하려면 다음을 실행하세요:")
-        print("   pip install plotly kaleido")
-    
-    print("\n🚀 사용 예시:")
-    print("""
-# 기본 사용법
-pdf_bytes = generate_report_with_gpt_insights(
-    financial_data=df,
-    insights=ai_insights,
-    streamlit_charts=[fig1, fig2, fig3],
-    gpt_api_key="your-api-key"
-)
-
-# 파일로 저장
-with open("sk_energy_report.pdf", "wb") as f:
-    f.write(pdf_bytes)
-""")
