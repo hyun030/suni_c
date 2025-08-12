@@ -181,51 +181,47 @@ def ascii_to_table(lines, registered_fonts, header_color='#E31E24', row_colors=N
 def fig_to_png_bytes(fig, width=900, height=450):
     """Plotly 차트를 PNG 바이트로 변환"""
     try:
-        return fig.to_image(format="png", width=width, height=height)
-    except Exception as e:
-        st.warning(f"차트 이미지 변환 실패: {e}")
-        return None
+        # kaleido 엔진 사용 시도
+        return fig.to_image(format="png", width=width, height=height, engine="kaleido")
+    except Exception as e1:
+        try:
+            # orca 엔진 사용 시도  
+            return fig.to_image(format="png", width=width, height=height, engine="orca")
+        except Exception as e2:
+            try:
+                # 기본 엔진 사용
+                return fig.to_image(format="png", width=width, height=height)
+            except Exception as e3:
+                st.error(f"모든 차트 변환 방법 실패:")
+                st.error(f"- kaleido: {e1}")
+                st.error(f"- orca: {e2}") 
+                st.error(f"- default: {e3}")
+                return None
 
 
-def add_financial_data_section(story, financial_data, registered_fonts, HEADING_STYLE, BODY_STYLE):
+def add_financial_data_section(story, financial_data, quarterly_df, registered_fonts, HEADING_STYLE, BODY_STYLE):
     """재무분석 결과 섹션 추가"""
-    if financial_data is None or financial_data.empty:
-        return
-    
     story.append(Paragraph("1. 재무분석 결과", HEADING_STYLE))
     
-    # 원시값 컬럼 제외하고 표시용 데이터 준비
-    cols_to_show = [c for c in financial_data.columns if not str(c).endswith('_원시값')]
-    df_disp = financial_data[cols_to_show].copy()
-    
-    # 데이터가 많은 경우 테이블을 여러 개로 분할
-    max_rows_per_table = 25
-    total_rows = len(df_disp)
-    
-    if total_rows <= max_rows_per_table:
-        # 한 테이블로 처리
-        table_data = [df_disp.columns.tolist()] + df_disp.values.tolist()
-        tbl = Table(table_data, repeatRows=1)
-        tbl.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F2F2F2')),
-            ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
-            ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ]))
-        story.append(tbl)
+    # 1-1. SK에너지 대비 경쟁사 갭차이 분석표
+    if financial_data is None or (hasattr(financial_data, 'empty') and financial_data.empty):
+        story.append(Paragraph("1-1. SK에너지 대비 경쟁사 갭차이 분석", BODY_STYLE))
+        story.append(Paragraph("재무 데이터가 제공되지 않았습니다.", BODY_STYLE))
+        story.append(Spacer(1, 12))
     else:
-        # 여러 테이블로 분할
-        for i in range(0, total_rows, max_rows_per_table):
-            end_idx = min(i + max_rows_per_table, total_rows)
-            chunk = df_disp.iloc[i:end_idx]
-            
-            if i > 0:
-                story.append(Paragraph(f"1-{i//max_rows_per_table + 1}. 재무분석 결과 (계속)", BODY_STYLE))
-            
-            table_data = [df_disp.columns.tolist()] + chunk.values.tolist()
+        story.append(Paragraph("1-1. SK에너지 대비 경쟁사 갭차이 분석", BODY_STYLE))
+        
+        # 원시값 컬럼 제외하고 표시용 데이터 준비
+        cols_to_show = [c for c in financial_data.columns if not str(c).endswith('_원시값')]
+        df_disp = financial_data[cols_to_show].copy()
+        
+        # 데이터가 많은 경우 테이블을 여러 개로 분할
+        max_rows_per_table = 25
+        total_rows = len(df_disp)
+        
+        if total_rows <= max_rows_per_table:
+            # 한 테이블로 처리
+            table_data = [df_disp.columns.tolist()] + df_disp.values.tolist()
             tbl = Table(table_data, repeatRows=1)
             tbl.setStyle(TableStyle([
                 ('GRID', (0,0), (-1,-1), 0.5, colors.black),
@@ -237,11 +233,87 @@ def add_financial_data_section(story, financial_data, registered_fonts, HEADING_
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ]))
             story.append(tbl)
-            
-            if end_idx < total_rows:
-                story.append(PageBreak())
+        else:
+            # 여러 테이블로 분할
+            for i in range(0, total_rows, max_rows_per_table):
+                end_idx = min(i + max_rows_per_table, total_rows)
+                chunk = df_disp.iloc[i:end_idx]
+                
+                if i > 0:
+                    story.append(Paragraph(f"1-1-{i//max_rows_per_table + 1}. 재무분석 결과 (계속)", BODY_STYLE))
+                
+                table_data = [df_disp.columns.tolist()] + chunk.values.tolist()
+                tbl = Table(table_data, repeatRows=1)
+                tbl.setStyle(TableStyle([
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F2F2F2')),
+                    ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+                    ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
+                    ('FONTSIZE', (0,0), (-1,-1), 8),
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ]))
+                story.append(tbl)
+                
+                if end_idx < total_rows:
+                    story.append(PageBreak())
+        
+        story.append(Spacer(1, 18))
     
-    story.append(Spacer(1, 18))
+    # 1-2. 분기별 재무지표 상세 데이터
+    if quarterly_df is None or (hasattr(quarterly_df, 'empty') and quarterly_df.empty):
+        story.append(Paragraph("1-2. 분기별 재무지표 상세 데이터", BODY_STYLE))
+        story.append(Paragraph("분기별 데이터가 제공되지 않았습니다.", BODY_STYLE))
+        story.append(Spacer(1, 18))
+    else:
+        story.append(Paragraph("1-2. 분기별 재무지표 상세 데이터", BODY_STYLE))
+        
+        # 분기별 데이터 테이블 생성
+        quarterly_display = quarterly_df.copy()
+        
+        # 테이블 생성
+        max_rows_quarterly = 30  # 분기별 데이터는 조금 더 많이 표시
+        total_quarterly_rows = len(quarterly_display)
+        
+        if total_quarterly_rows <= max_rows_quarterly:
+            table_data_q = [quarterly_display.columns.tolist()] + quarterly_display.values.tolist()
+            tbl_q = Table(table_data_q, repeatRows=1)
+            tbl_q.setStyle(TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E6F3FF')),
+                ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+                ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ]))
+            story.append(tbl_q)
+        else:
+            # 여러 테이블로 분할
+            for i in range(0, total_quarterly_rows, max_rows_quarterly):
+                end_idx = min(i + max_rows_quarterly, total_quarterly_rows)
+                chunk = quarterly_display.iloc[i:end_idx]
+                
+                if i > 0:
+                    story.append(Paragraph(f"1-2-{i//max_rows_quarterly + 1}. 분기별 데이터 (계속)", BODY_STYLE))
+                
+                table_data_q = [quarterly_display.columns.tolist()] + chunk.values.tolist()
+                tbl_q = Table(table_data_q, repeatRows=1)
+                tbl_q.setStyle(TableStyle([
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E6F3FF')),
+                    ('FONTNAME', (0,0), (-1,0), registered_fonts.get('KoreanBold', 'Helvetica-Bold')),
+                    ('FONTNAME', (0,1), (-1,-1), registered_fonts.get('Korean', 'Helvetica')),
+                    ('FONTSIZE', (0,0), (-1,-1), 8),
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ]))
+                story.append(tbl_q)
+                
+                if end_idx < total_quarterly_rows:
+                    story.append(PageBreak())
+        
+        story.append(Spacer(1, 18))
 
 
 def add_charts_section(story, financial_data, quarterly_df, selected_charts, registered_fonts, HEADING_STYLE, BODY_STYLE):
@@ -256,8 +328,11 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
     
     # 주요 비율 비교 막대 그래프
     try:
-        if financial_data is not None and not financial_data.empty and '구분' in financial_data.columns:
+        if financial_data is not None and (not hasattr(financial_data, 'empty') or not financial_data.empty) and '구분' in financial_data.columns:
+            st.info("🔍 막대그래프 생성 시도 중...")
             ratio_rows = financial_data[financial_data['구분'].astype(str).str.contains('%', na=False)].copy()
+            st.write(f"비율 데이터 행 수: {len(ratio_rows)}")
+            
             if not ratio_rows.empty:
                 # 주요 지표 순서 정렬
                 key_order = ['영업이익률(%)', '순이익률(%)', '매출총이익률(%)', '매출원가율(%)', '판관비율(%)']
@@ -267,18 +342,28 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                 # 데이터 변환
                 melt = []
                 company_cols = [c for c in ratio_rows.columns if c != '구분' and not str(c).endswith('_원시값')]
+                st.write(f"회사 컬럼들: {company_cols}")
+                
                 for _, r in ratio_rows.iterrows():
                     for comp in company_cols:
                         val = str(r[comp]).replace('%','').strip()
                         try:
-                            melt.append({'지표': r['구분'], '회사': comp, '수치': float(val)})
+                            val_float = float(val)
+                            melt.append({'지표': r['구분'], '회사': comp, '수치': val_float})
                         except:
-                            pass
+                            st.warning(f"변환 실패: {comp}={val}")
+                
+                st.write(f"변환된 데이터 개수: {len(melt)}")
                 
                 if melt:
                     bar_df = pd.DataFrame(melt)
+                    st.write("막대그래프 데이터:")
+                    st.dataframe(bar_df.head())
+                    
                     fig_bar = px.bar(bar_df, x='지표', y='수치', color='회사', barmode='group', 
                                    title="주요 비율 비교")
+                    st.success("✅ 막대그래프 생성 완료")
+                    
                     img_bytes = fig_to_png_bytes(fig_bar)
                     if img_bytes:
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -292,17 +377,37 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         except:
                             pass
                         charts_added = True
+                        st.success("✅ 막대그래프 PDF 삽입 완료")
+                    else:
+                        st.error("❌ 차트 이미지 변환 실패")
+                else:
+                    st.warning("⚠️ 변환 가능한 비율 데이터 없음")
+            else:
+                st.warning("⚠️ 비율 데이터가 비어있음")
+        else:
+            st.warning("⚠️ 재무 데이터 없거나 '구분' 컬럼 없음")
     except Exception as e:
+        st.error(f"❌ 막대그래프 생성 오류: {e}")
         story.append(Paragraph(f"막대그래프 생성 오류: {e}", BODY_STYLE))
 
     # 분기별 추이 그래프들
     try:
-        if quarterly_df is not None and not quarterly_df.empty:
+        if quarterly_df is not None and (not hasattr(quarterly_df, 'empty') or not quarterly_df.empty):
+            st.info("🔍 분기별 추이 그래프 생성 시도 중...")
+            st.write(f"분기별 데이터 형태: {quarterly_df.shape}")
+            st.write(f"분기별 데이터 컬럼들: {list(quarterly_df.columns)}")
+            
             # 영업이익률 추이
             if all(col in quarterly_df.columns for col in ['분기', '회사', '영업이익률']):
+                st.info("📈 영업이익률 추이 그래프 생성 중...")
                 fig_line = go.Figure()
-                for comp in quarterly_df['회사'].dropna().unique():
-                    cdf = quarterly_df[quarterly_df['회사'] == comp]
+                companies = quarterly_df['회사'].dropna().unique()
+                st.write(f"회사들: {companies}")
+                
+                for comp in companies:
+                    cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
+                    st.write(f"{comp} 데이터 개수: {len(cdf)}")
+                    
                     fig_line.add_trace(go.Scatter(
                         x=cdf['분기'], 
                         y=cdf['영업이익률'], 
@@ -311,12 +416,14 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         line=dict(width=3),
                         marker=dict(size=8)
                     ))
+                    
                 fig_line.update_layout(
                     title="분기별 영업이익률 추이", 
                     xaxis_title="분기", 
                     yaxis_title="영업이익률(%)",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
+                
                 img_bytes = fig_to_png_bytes(fig_line)
                 if img_bytes:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -330,12 +437,19 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                     except:
                         pass
                     charts_added = True
+                    st.success("✅ 영업이익률 추이 그래프 PDF 삽입 완료")
+                else:
+                    st.error("❌ 영업이익률 그래프 이미지 변환 실패")
+            else:
+                st.warning(f"⚠️ 영업이익률 그래프를 위한 필수 컬럼 부족: {['분기', '회사', '영업이익률']}")
 
             # 매출액 추이
             if all(col in quarterly_df.columns for col in ['분기', '회사', '매출액']):
+                st.info("📈 매출액 추이 그래프 생성 중...")
                 fig_rev = go.Figure()
+                
                 for comp in quarterly_df['회사'].dropna().unique():
-                    cdf = quarterly_df[quarterly_df['회사'] == comp]
+                    cdf = quarterly_df[quarterly_df['회사'] == comp].copy()
                     fig_rev.add_trace(go.Scatter(
                         x=cdf['분기'], 
                         y=cdf['매출액'], 
@@ -344,12 +458,14 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                         line=dict(width=3),
                         marker=dict(size=8)
                     ))
+                    
                 fig_rev.update_layout(
                     title="분기별 매출액 추이", 
                     xaxis_title="분기", 
                     yaxis_title="매출액(조원)",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
+                
                 img_bytes = fig_to_png_bytes(fig_rev)
                 if img_bytes:
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -363,7 +479,15 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
                     except:
                         pass
                     charts_added = True
+                    st.success("✅ 매출액 추이 그래프 PDF 삽입 완료")
+                else:
+                    st.error("❌ 매출액 그래프 이미지 변환 실패")
+            else:
+                st.warning(f"⚠️ 매출액 그래프를 위한 필수 컬럼 부족: {['분기', '회사', '매출액']}")
+        else:
+            st.warning("⚠️ 분기별 데이터 없음")
     except Exception as e:
+        st.error(f"❌ 추이 그래프 생성 오류: {e}")
         story.append(Paragraph(f"추이 그래프 생성 오류: {e}", BODY_STYLE))
 
     # 외부에서 전달된 Plotly 차트들 (selected_charts)
@@ -387,12 +511,20 @@ def add_charts_section(story, financial_data, quarterly_df, selected_charts, reg
     except Exception as e:
         story.append(Paragraph(f"추가 차트 삽입 오류: {e}", BODY_STYLE))
     
+    # 차트가 하나도 없으면 안내 메시지 추가
+    if not charts_added:
+        story.append(Paragraph("생성 가능한 차트가 없습니다. 재무 데이터 또는 분기별 데이터를 확인해주세요.", BODY_STYLE))
+        story.append(Spacer(1, 18))
+    
     return charts_added
 
 
 def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, header_color='#E31E24'):
     """AI 인사이트 섹션 추가"""
     if not insights:
+        story.append(Paragraph("2-AI. 분석 인사이트", BODY_STYLE))
+        story.append(Paragraph("AI 인사이트가 제공되지 않았습니다.", BODY_STYLE))
+        story.append(Spacer(1, 18))
         return
     
     story.append(Paragraph("2-AI. 분석 인사이트", BODY_STYLE))
@@ -433,10 +565,11 @@ def add_ai_insights_section(story, insights, registered_fonts, BODY_STYLE, heade
 
 def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE, BODY_STYLE):
     """뉴스 하이라이트 및 종합 분석 섹션 추가"""
-    if news_data is not None and not news_data.empty:
+    story.append(Paragraph("3. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
+    
+    if news_data is not None and (not hasattr(news_data, 'empty') or not news_data.empty):
         story.append(Paragraph("3. 뉴스 하이라이트 및 종합 분석", HEADING_STYLE))
         
-        # 뉴스 제목 리스트 (최대 10개)
         story.append(Paragraph("3-1. 최신 뉴스 하이라이트", BODY_STYLE))
         for i, title in enumerate(news_data["제목"].head(10), 1):
             story.append(Paragraph(f"{i}. {title}", BODY_STYLE))
@@ -474,10 +607,16 @@ def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE
                                    [colors.whitesmoke, colors.HexColor('#F0F8FF')])
                 if tbl:
                     story.append(tbl)
+        else:
+            story.append(Paragraph("AI 종합 분석이 제공되지 않았습니다.", BODY_STYLE))
     else:
+        # 뉴스 데이터가 없는 경우
+        story.append(Paragraph("뉴스 데이터가 제공되지 않았습니다.", BODY_STYLE))
+        
         # 뉴스 데이터가 없어도 AI 인사이트가 있으면 표시
         if insights:
-            story.append(Paragraph("3. 종합 분석 및 시사점", HEADING_STYLE))
+            story.append(Paragraph("3-1. 종합 분석 및 시사점", BODY_STYLE))
+            story.append(Spacer(1, 8))
             
             blocks = clean_ai_text(str(insights))
             ascii_buffer = []
@@ -505,6 +644,10 @@ def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE
                                    [colors.whitesmoke, colors.HexColor('#F0FFF0')])
                 if tbl:
                     story.append(tbl)
+        else:
+            story.append(Paragraph("AI 인사이트도 제공되지 않았습니다.", BODY_STYLE))
+    
+    story.append(Spacer(1, 18))
 
 
 def create_enhanced_pdf_report(
