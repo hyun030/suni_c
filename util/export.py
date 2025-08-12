@@ -631,6 +631,71 @@ def add_news_section(story, news_data, insights, registered_fonts, HEADING_STYLE
         print(f"❌ 뉴스 섹션 추가 오류: {e}")
 
 
+def create_excel_report(financial_data=None, news_data=None, insights=None):
+    """Excel 보고서 생성"""
+    try:
+        print("🔄 Excel 보고서 생성 시작...")
+        print(f"   - 재무데이터: {'있음' if financial_data is not None and not financial_data.empty else '없음'}")
+        print(f"   - 뉴스데이터: {'있음' if news_data is not None and not news_data.empty else '없음'}")
+        print(f"   - AI인사이트: {'있음' if insights else '없음'}")
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 재무분석 시트
+            if financial_data is not None and not financial_data.empty:
+                print("✅ 재무분석 시트 추가")
+                financial_data.to_excel(writer, sheet_name='재무분석', index=False)
+            else:
+                # 빈 시트라도 생성
+                pd.DataFrame({'메모': ['재무 데이터가 없습니다.']}).to_excel(writer, sheet_name='재무분석', index=False)
+                print("⚠️ 재무분석 시트 - 데이터 없음")
+            
+            # 뉴스분석 시트
+            if news_data is not None and not news_data.empty:
+                print("✅ 뉴스분석 시트 추가")
+                news_data.to_excel(writer, sheet_name='뉴스분석', index=False)
+            else:
+                pd.DataFrame({'메모': ['뉴스 데이터가 없습니다.']}).to_excel(writer, sheet_name='뉴스분석', index=False)
+                print("⚠️ 뉴스분석 시트 - 데이터 없음")
+            
+            # AI인사이트 시트
+            if insights:
+                print("✅ AI인사이트 시트 추가")
+                # 인사이트를 적절히 포맷팅
+                insight_lines = str(insights).split('\n')
+                insight_df = pd.DataFrame({'AI 인사이트': insight_lines})
+                insight_df.to_excel(writer, sheet_name='AI인사이트', index=False)
+            else:
+                pd.DataFrame({'메모': ['AI 인사이트가 없습니다.']}).to_excel(writer, sheet_name='AI인사이트', index=False)
+                print("⚠️ AI인사이트 시트 - 데이터 없음")
+        
+        output.seek(0)
+        print("✅ Excel 보고서 생성 완료!")
+        return output.getvalue()
+        
+    except Exception as e:
+        print(f"❌ Excel 보고서 생성 오류: {e}")
+        import traceback
+        print(f"상세 오류: {traceback.format_exc()}")
+        
+        # 최소한의 에러 Excel 생성
+        try:
+            print("🔄 최소한의 에러 Excel 생성 시도...")
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                error_df = pd.DataFrame({
+                    '오류': [f"Excel 생성 중 오류 발생: {str(e)}"],
+                    '해결방법': ['시스템 관리자에게 문의해주세요.']
+                })
+                error_df.to_excel(writer, sheet_name='오류정보', index=False)
+            output.seek(0)
+            print("✅ 에러 Excel 생성 완료")
+            return output.getvalue()
+        except Exception as e2:
+            print(f"❌ 에러 Excel 생성도 실패: {e2}")
+            raise e
+
+
 def create_enhanced_pdf_report(
     financial_data=None,
     news_data=None,
