@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
+import os
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
+# kaleido 환경 설정 (Streamlit Cloud용) - 최우선 설정
+os.environ['KALEIDO_EXECUTABLE_PATH'] = '/usr/bin/kaleido'
+os.environ['PLOTLY_RENDERER'] = 'json'
+
+# 페이지 설정
+st.set_page_config(
+    page_title="SK에너지 손익개선 대시보드", 
+    page_icon="⚡", 
+    layout="wide"
+)
 
 import config
 from data.loader import DartAPICollector, QuarterlyDataCollector, SKNewsCollector
@@ -14,8 +26,6 @@ from visualization.charts import (
 )
 from util.export import create_excel_report, create_enhanced_pdf_report
 
-st.set_page_config(page_title="SK에너지 경쟁사 분석 대시보드", page_icon="⚡", layout="wide")
-
 def initialize_session_state():
     session_vars = [
         'financial_data', 'quarterly_data', 'news_data', 
@@ -27,6 +37,25 @@ def initialize_session_state():
             st.session_state[var] = None
     if 'custom_keywords' not in st.session_state:
         st.session_state.custom_keywords = config.BENCHMARKING_KEYWORDS
+
+def check_kaleido_status():
+    """kaleido 의존성 체크 (디버그용)"""
+    try:
+        import kaleido
+        import plotly.io as pio
+        import plotly.graph_objects as go
+        
+        # 테스트 차트 생성해서 변환 가능한지 체크
+        fig = go.Figure(data=go.Bar(x=[1, 2, 3], y=[1, 2, 3]))
+        img_bytes = pio.to_image(fig, format='png', width=100, height=100)
+        
+        if len(img_bytes) > 0:
+            return True, "✅ kaleido 의존성 체크 완료!"
+        else:
+            return False, "❌ kaleido 이미지 변환 실패"
+            
+    except Exception as e:
+        return False, f"❌ kaleido 의존성 오류: {e}"
         
 def sort_quarterly_by_quarter(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -40,6 +69,19 @@ def sort_quarterly_by_quarter(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     initialize_session_state()
     st.title("⚡ SK에너지 경쟁사 분석 대시보드")
+    
+    # 사이드바에 시스템 체크 기능 추가
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("🔧 시스템 상태")
+        if st.button("📊 kaleido 상태 확인"):
+            with st.spinner("시스템 의존성 체크 중..."):
+                status, message = check_kaleido_status()
+                if status:
+                    st.success(message)
+                else:
+                    st.error(message)
+                    st.info("💡 해결방법: packages.txt와 requirements.txt를 확인하세요")
     
     tabs = st.tabs(["📈 재무분석", "📁 수동 파일 업로드", "📰 뉴스분석", "🧠 통합 인사이트", "📄 보고서 생성"])
     
@@ -94,8 +136,6 @@ def main():
                 else:
                     st.error("데이터 수집에 실패했습니다.")
 
-
-
         if 'financial_data' in st.session_state and st.session_state.financial_data is not None:
             st.markdown("---")
             st.subheader("💰 사업보고서(연간) 재무분석 결과")
@@ -137,7 +177,6 @@ def main():
             quarterly_df_sorted = sort_quarterly_by_quarter(quarterly_df)
             st.dataframe(quarterly_df_sorted, use_container_width=True)
 
-            
             if PLOTLY_AVAILABLE:
                 st.plotly_chart(create_quarterly_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_quarterly_trend")
                 st.plotly_chart(create_gap_trend_chart(st.session_state.quarterly_data), use_container_width=True, key="dart_gap_trend")
